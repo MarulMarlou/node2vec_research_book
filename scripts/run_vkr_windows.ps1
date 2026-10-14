@@ -3,8 +3,9 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode quick
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode main
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
+# powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall
 )
@@ -49,6 +50,14 @@ foreach ($file in $required) {
     if (-not (Test-Path $file)) {
         throw "Required Book-Crossing CSV missing: $file"
     }
+}
+if ($Mode -eq "study-quick" -or $Mode -eq "study-full") {
+    $StudyMode = if ($Mode -eq "study-quick") { "quick" } else { "full" }
+    Write-Host "Node2Vec train/validation/test study ($StudyMode). Output: results/study"
+    & $python -m src.vkr_embedding_study --mode $StudyMode --max-users 150 --max-books 1000
+    if ($LASTEXITCODE -ne 0) { throw "Embedding study failed" }
+    Write-Host "Study completed. See results/study/study_report.json and embedding_experiments.csv"
+    exit 0
 }
 if ($Mode -eq "quick") {
     Write-Host "Quick run: 150 users, 1000 books; this replaces data/processed and results baseline."
