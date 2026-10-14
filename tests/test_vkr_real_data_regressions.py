@@ -49,3 +49,23 @@ def test_cached_walk_is_reproducible_and_rejects_nonpositive_weights():
     with pytest.raises(ValueError, match='positive'):
         _cached_walks(graph, sorted(graph.nodes()), walk_length=8,
                       num_walks=3, p=1, q=1, seed=17)
+
+
+def test_word2vec_embedding_reproducible_across_process_hash_seed():
+    import os
+    import subprocess
+    command = '''import hashlib, networkx as nx
+from src.vkr_recommend import train_node2vec
+G=nx.Graph()
+G.add_weighted_edges_from([('book:1','author:a',1),('book:2','author:a',1),
+                           ('book:2','user:5',0.9),('book:3','user:5',0.7)])
+e=train_node2vec(G,dimensions=16,num_walks=6,walk_length=10,epochs=3,seed=42)
+print(hashlib.sha256(e.values.tobytes()).hexdigest())'''
+    hashes = []
+    for hash_seed in ('1', '731'):
+        env = dict(os.environ, PYTHONHASHSEED=hash_seed, OPENBLAS_NUM_THREADS='1')
+        proc = subprocess.run([sys.executable, '-c', command], cwd=Path(__file__).resolve().parents[1],
+                              env=env, text=True, capture_output=True, timeout=30, check=True)
+        hashes.append(proc.stdout.strip())
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
