@@ -158,7 +158,7 @@ def render() -> None:
                                   format_func=lambda bid: next(r["title"] for r in explained if r["book_id"] == bid))
             selected = next(r for r in explained if r["book_id"] == chosen)
             plot_info = path_chart_data(assets.graph, selected["path"])
-            st.plotly_chart(draw_evidence_path(plot_info), use_container_width=True)
+            st.plotly_chart(draw_evidence_path(plot_info), width="stretch")
             st.write(selected["explanation"])
             st.caption("Линии соответствуют только фактически присутствующим рёбрам графа; "
                        "их исходные направления указаны ниже.")
@@ -166,7 +166,7 @@ def render() -> None:
                 "from_id": "Откуда", "to_id": "Куда", "relation": "Тип связи",
                 "source_file": "Файл-источник", "source_row": "Номер записи",
                 "source_url": "Внешняя ссылка"
-            }), hide_index=True, use_container_width=True)
+            }), hide_index=True, width="stretch")
 
     with tab_baseline:
         st.markdown("**Сравнение по метаданным (Jaccard)** — общие автор, издательство и жанр. "
@@ -175,7 +175,7 @@ def render() -> None:
         if baseline:
             st.dataframe(pd.DataFrame(baseline)[["rank", "title", "jaccard"]]
                          .rename(columns={"rank": "Место", "title": "Книга", "jaccard": "Jaccard"}),
-                         hide_index=True, use_container_width=True)
+                         hide_index=True, width="stretch")
         else:
             st.info("Недостаточно метаданных для контрольного метода.")
 
