@@ -1,32 +1,46 @@
-﻿# Python
+# Python caches / tests
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Virtual environments
+# Local Python interpreters and virtual environments
 .venv/
+.venv-*/
+.venv*/
 venv/
 env/
 
-# IDE
+# Local editors, logs, OS
 .idea/
 .vscode/
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
 
-# Large archives
+# Downloaded source datasets and derivatives (may contain user interaction data)
+/data/raw/
+/data/processed/
+/data/interim/
+/data/external/
+
+# Fresh VKR model artifacts and evaluation runs
+/results/embeddings/
+/results/study/
+/results/metrics/vkr_*.json
+/results/metrics/vkr_*.csv
+/results/plots/vkr_*.png
+/results/plots/vkr_*.svg
+
+# Compressed data, local configuration and secrets
 *.zip
 *.7z
 *.rar
-
-# Datasets and generated graphs
-/data/raw/
-/data/processed/
-
-# Trained embeddings
-/results/embeddings/
-
-# Temporary files
-*.log
-*.tmp
-.DS_Store
-Thumbs.db
+.env
+.env.*
+!.env.example

@@ -1,95 +1,67 @@
-#  КРАТКОЕ РУКОВОДСТВО - Node2Vec Research System
+# Быстрый запуск актуальной ВКР (Windows)
 
-##  Быстрый старт (5 минут)
+**Это руководство относится к ветке** `feature/vkr-stage1-typed-graph-holdout`. Для полной информации см. [README](README.md) и [пошаговую инструкцию Windows](docs/VKR_WINDOWS.md).
 
-### 1. Подготовка окружения
-```bash
-# Создать виртуальное окружение
-python -m venv .venv
+## 1. Установка
 
-# Активировать (Windows)
-.venv\Scripts\activate
+- Python **3.11** (не 3.15), Git, Windows PowerShell.
+- Исходные CSV Book-Crossing: `BX-Books.csv`, `BX-Book-Ratings.csv` (папка `data/raw/`). [Источник данных и описание — GroupLens](https://grouplens.org/datasets/book-crossing/). Файлы не входят в репозиторий.
 
-# Активировать (Linux/Mac)  
-source .venv/bin/activate
+Если Python 3.11 ещё отсутствует:
 
-# Установить зависимости
-pip install -r requirements.txt
+```powershell
+winget install --id Python.Python.3.11 --exact --source winget --accept-package-agreements --accept-source-agreements
 ```
 
-### 2. Скачать данные
-1. Перейти: https://www.kaggle.com/datasets/quhujun/book-crossing
-2. Скачать архив и извлечь `BX-Books.csv` и `BX-Book-Ratings.csv`
-3. Поместить в папку `data/raw/`
+Перезапустите PowerShell, проверьте `py -3.11 --version`.
 
-### 3. Запустить эксперименты
+## 2. Скачать **эту** ветку
 
-**Автоматический запуск (рекомендуется):**
-```bash
-# Windows
-run_full_experiment.bat
-
-# Linux/Mac
-chmod +x run_full_experiment.sh
-./run_full_experiment.sh
+```powershell
+git clone --branch feature/vkr-stage1-typed-graph-holdout --single-branch https://github.com/MarulMarlou/node2vec_research_book.git
+cd node2vec_research_book
 ```
 
-**Ручной запуск:**
-```bash
-python -m src.debug_check        # Проверка
-python -m src.convert           # Конвертация данных  
-python -m src.data_loader       # Создание графа
-python -m src.experiments_updated # Эксперименты
-python -m src.create_visualizations # Визуализации
-python -m src.analyze_results   # Анализ
+При скачивании ZIP вместо clone откройте [ветку ВКР](https://github.com/MarulMarlou/node2vec_research_book/tree/feature/vkr-stage1-typed-graph-holdout), нажмите **Code → Download ZIP** и распакуйте архив.
+
+## 3. Данные
+
+```text
+node2vec_research_book/
+  data/
+    raw/
+      BX-Books.csv
+      BX-Book-Ratings.csv
 ```
 
-##  Что получится
+Имена файлов должны совпадать **точно**. CSV имеют формат `latin-1`, разделитель `;`. Не открывайте и не пересохраняйте их в Excel.
 
-После выполнения всех команд у вас будет:
+## 4. Построить граф и обучить Node2Vec
 
-###  Результаты  
-- `results/plots/` - 7+ графиков и визуализаций
-- `results/metrics/` - таблицы с метриками и анализом
-- `results/embeddings/` - векторные представления узлов
+В PowerShell из корня проекта:
 
-###  Исходный код
-- `src/` - весь Python код системы
-- Все модули готовы к работе и расширению
-
-##  Решение проблем
-
-** "BX-Books.csv not found"**
-→ Скачайте данные с Kaggle в `data/raw/`
-
-** "No module named 'umap'"**  
-→ `pip install umap-learn`
-
-** "Найдено 0 пользователей"**
-→ Перезапустите: `python -m src.convert`
-
-** Диагностика:**
-→ `python -m src.debug_check`
-
-##  Параметры экспериментов
-
-Можно изменить в `src/experiments_updated.py`:
-
-```python
-EXPERIMENT_PARAMETERS = [
-    {'experiment_id': 'exp_001', 'p': 1.0, 'q': 1.0, ...},
-    {'experiment_id': 'exp_002', 'p': 2.0, 'q': 0.5, ...},
-    # Добавьте свои эксперименты
-]
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode quick
 ```
 
-**Ключевые параметры:**
-- `p` (0.5-4.0) - возвращение к предыдущему узлу
-- `q` (0.25-4.0) - баланс локального/глобального поиска  
-- `dimensions` (32-256) - размерность эмбеддингов
+При первом запуске автоматически создаётся `.venv-vkr` и устанавливаются зависимости. Режим `quick`: до 150 пользователей и 1 000 книг. После успешного завершения в консоли будет `audit_passed: true`. Ошибка `Python 3.11 required` означает, что версия 3.11 не обнаружена командой `py -3.11`.
 
-## Поддержка
+## 5. Посмотреть демонстрацию
 
-- Диагностика проблем: `python -m src.debug_check`  
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app -SkipInstall
+```
 
----
+Откройте http://localhost:8501. Сначала обязательно выполните `quick` или `main` — без графа и эмбеддингов интерфейсу нечего показывать.
+
+## 6. Отдельное исследование эмбеддингов
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick -SkipInstall
+```
+
+Результаты: `results/study/study_report.json` и `results/study/embedding_experiments.csv` — **3 конфигурации Node2Vec**, selection по validation и однократное вычисление test.
+
+Режим `study-full` — **36 запусков Node2Vec на уменьшенном графе**; может выполняться заметно дольше. Он не является сравнением с TransE и **не закрывает второй этап самостоятельно**.
+
+Другие команды: `-Mode main` — до 1 000 пользователей / 5 000 книг; `-Mode tests` — тесты. При повторных запусках `quick`/`main` основные артефакты перезаписываются. Для повторных запусков используйте `-SkipInstall` после установки зависимостей.
