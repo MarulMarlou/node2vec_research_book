@@ -1,0 +1,4 @@
+experiment_id,p,q,walk_length,num_walks,dimensions,num_embeddings,Precision@5,Recall@5,Precision@10,Recall@10
+exp_001,1.0,1.0,10,5,64,7637,0.0164,0.0026,0.0156,0.0047
+exp_002,2.0,0.5,10,5,64,7637,0.0182,0.0031,0.0172,0.0049
+exp_003,0.5,2.0,10,5,64,7637,0.0186,0.0037,0.0172,0.0061

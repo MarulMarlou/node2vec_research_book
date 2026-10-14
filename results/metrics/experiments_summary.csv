@@ -1,0 +1,4 @@
+experiment_id,p,q,walk_length,num_walks,dimensions,embeddings_file,num_embeddings
+exp_001,1.0,1.0,10,5,64,C:\Users\Elchan\PycharmProjects\node2vec_research\results\embeddings\exp_001_emb.csv,7637
+exp_002,2.0,0.5,10,5,64,C:\Users\Elchan\PycharmProjects\node2vec_research\results\embeddings\exp_002_emb.csv,7637
+exp_003,0.5,2.0,10,5,64,C:\Users\Elchan\PycharmProjects\node2vec_research\results\embeddings\exp_003_emb.csv,7637
