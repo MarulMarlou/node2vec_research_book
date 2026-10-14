@@ -1,6 +1,7 @@
 """Train-only Node2Vec and clean, explicitly separated recommendation protocols."""
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import defaultdict
 from pathlib import Path
 import json
@@ -44,6 +45,66 @@ def biased_walk(graph: nx.Graph, start: str, *, length: int, p: float, q: float,
     return walk
 
 
+def _cached_walks(graph: nx.Graph, nodes: list[str], *, walk_length: int,
+                  num_walks: int, p: float, q: float, seed: int) -> list[list[str]]:
+    """Avoid O(degree) recomputation on every step of long Node2Vec walks.
+
+    Cache the cumulative transition weights for each directed (previous,current)
+    state, and use O(log degree) binary search per subsequent random step.
+    Each cache entry is computed only when its state is visited. This retains
+    the original second-order weighted transition probabilities.
+    """
+    if p <= 0 or q <= 0 or not all(math.isfinite(x) for x in (p, q)):
+        raise ValueError("p and q must be positive and finite")
+    neighbors = {n: tuple(sorted(graph.neighbors(n))) for n in nodes}
+    neighbor_sets = {n: set(adj) for n, adj in neighbors.items()}
+    edge_weights = {}
+    for current, adjacent in neighbors.items():
+        weights = np.fromiter((float(graph[current][n].get("weight", 1.0))
+                               for n in adjacent), dtype=np.float64, count=len(adjacent))
+        if not np.isfinite(weights).all() or (weights <= 0).any():
+            raise ValueError("all graph edge weights must be positive and finite")
+        edge_weights[current] = weights
+    rng = random.Random(seed)
+    transition_cdf: dict[tuple[str | None, str], np.ndarray] = {}
+
+    def advance(previous: str | None, current: str) -> str | None:
+        adjacent = neighbors[current]
+        if not adjacent:
+            return None
+        key = (previous, current)
+        cumulative = transition_cdf.get(key)
+        if cumulative is None:
+            weights = edge_weights[current].copy()
+            if previous is not None:
+                prior_set = neighbor_sets[previous]
+                for i, next_node in enumerate(adjacent):
+                    if next_node == previous:
+                        weights[i] /= p
+                    elif next_node not in prior_set:
+                        weights[i] /= q
+            cumulative = np.cumsum(weights)
+            transition_cdf[key] = cumulative
+        position = bisect_left(cumulative, rng.random() * float(cumulative[-1]))
+        return adjacent[min(position, len(adjacent) - 1)]
+
+    walks: list[list[str]] = []
+    for _ in range(num_walks):
+        shuffled = nodes.copy()
+        rng.shuffle(shuffled)
+        for start in shuffled:
+            walk = [start]
+            while len(walk) < walk_length:
+                previous = walk[-2] if len(walk) > 1 else None
+                next_node = advance(previous, walk[-1])
+                if next_node is None:
+                    break
+                walk.append(next_node)
+            if len(walk) > 1:
+                walks.append(walk)
+    return walks
+
+
 def train_node2vec(graph: nx.Graph, *, dimensions: int = 64,
                    walk_length: int = 30, num_walks: int = 8,
                    p: float = 1.0, q: float = 1.0, seed: int = 42,
@@ -55,18 +116,11 @@ def train_node2vec(graph: nx.Graph, *, dimensions: int = 64,
         raise ValueError("graph and training parameters must be nonempty/positive")
     if graph.is_directed() or graph.is_multigraph():
         raise ValueError("train_node2vec expects the simple undirected train projection")
-    rng = random.Random(seed)
     nodes = sorted(map(str, graph.nodes()))
     if len(nodes) != len(graph):
         raise ValueError("node IDs must be unique string identifiers")
-    walks = []
-    for _ in range(num_walks):
-        shuffled = nodes.copy()
-        rng.shuffle(shuffled)
-        for node in shuffled:
-            walk = biased_walk(graph, node, length=walk_length, p=p, q=q, rng=rng)
-            if len(walk) > 1:
-                walks.append(walk)
+    walks = _cached_walks(graph, nodes, walk_length=walk_length,
+                          num_walks=num_walks, p=p, q=q, seed=seed)
     if not walks:
         raise ValueError("graph contains no usable edges for training")
     model = Word2Vec(sentences=walks, vector_size=dimensions, window=window,
