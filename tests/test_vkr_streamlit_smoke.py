@@ -38,4 +38,4 @@ def test_streamlit_page_loads_and_recommends(tmp_path):
     assert not at.exception, [str(e.message) for e in at.exception]
     assert len(at.metric) == 3
     assert len(at.tabs) == 4
-    assert any("Book" in element.value for element in at.header)
+    assert any("Рекомендации" in element.value for element in at.header)
