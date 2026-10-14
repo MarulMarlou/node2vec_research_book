@@ -28,3 +28,20 @@ jobs:
         run: python -m compileall -q src/vkr_app.py
       - name: Run isolated VKR tests
         run: python -m pytest -q tests/test_vkr_foundation.py tests/test_vkr_recommend_explain.py tests/test_vkr_pipeline.py tests/test_vkr_dashboard.py tests/test_vkr_book_eval.py tests/test_vkr_app_plot.py
+  streamlit_smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements-vkr-app.txt
+            requirements-vkr-core.txt
+      - name: Install app dependencies
+        run: python -m pip install -r requirements-vkr-app.txt
+      - name: Exercise Streamlit with synthetic artifacts
+        run: python -m pytest -q tests/test_vkr_streamlit_smoke.py
