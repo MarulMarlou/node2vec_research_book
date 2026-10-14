@@ -11,6 +11,7 @@ from pathlib import Path
 import time
 import networkx as nx
 import pandas as pd
+from threadpoolctl import threadpool_limits
 from src.vkr_prepare import prepare
 from src.vkr_recommend import (train_node2vec, save_embeddings,
                                evaluate_user_holdout, recommend_similar_books,
@@ -50,8 +51,11 @@ def run_pipeline(raw_dir: Path, processed_dir: Path, results_dir: Path, *,
                                 epochs=epochs, seed=seed)
     train_seconds = time.perf_counter() - started
     save_embeddings(embeddings, results_dir / "embeddings")
-    user_metrics = evaluate_user_holdout(embeddings, train, test)
-    book_proxy_metrics = evaluate_book_retrieval_proxy(graph, embeddings, train, test)
+    # Tiny BLAS operations can become dramatically slower with excessive threads.
+    # A local limit makes this pipeline predictable on multicore hardware.
+    with threadpool_limits(limits=1, user_api="blas"):
+        user_metrics = evaluate_user_holdout(embeddings, train, test)
+        book_proxy_metrics = evaluate_book_retrieval_proxy(graph, embeddings, train, test)
 
     books = sorted(n for n, attrs in graph.nodes(data=True)
                    if attrs.get("entity_type") == "book")
