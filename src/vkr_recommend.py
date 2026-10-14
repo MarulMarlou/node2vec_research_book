@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import defaultdict
+import hashlib
 from pathlib import Path
 import json
 import math
@@ -105,6 +106,11 @@ def _cached_walks(graph: nx.Graph, nodes: list[str], *, walk_length: int,
     return walks
 
 
+def _stable_word_hash(word: str) -> int:
+    """Make Word2Vec initialization independent of PYTHONHASHSEED."""
+    return int.from_bytes(hashlib.blake2b(str(word).encode('utf-8'), digest_size=8).digest(), 'big')
+
+
 def train_node2vec(graph: nx.Graph, *, dimensions: int = 64,
                    walk_length: int = 30, num_walks: int = 8,
                    p: float = 1.0, q: float = 1.0, seed: int = 42,
@@ -125,7 +131,8 @@ def train_node2vec(graph: nx.Graph, *, dimensions: int = 64,
         raise ValueError("graph contains no usable edges for training")
     model = Word2Vec(sentences=walks, vector_size=dimensions, window=window,
                      min_count=1, sg=1, negative=5, workers=1,
-                     seed=seed, epochs=epochs, sorted_vocab=1)
+                     seed=seed, epochs=epochs, sorted_vocab=1,
+                     hashfxn=_stable_word_hash)
     return pd.DataFrame.from_dict(
         {node: model.wv[node] for node in nodes if node in model.wv}, orient="index"
     ).sort_index()
