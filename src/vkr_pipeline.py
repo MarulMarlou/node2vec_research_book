@@ -5,6 +5,7 @@ book-book relevance currently has no independent labeled ground truth.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import time
@@ -15,6 +16,16 @@ from src.vkr_recommend import (train_node2vec, save_embeddings,
                                evaluate_user_holdout, recommend_similar_books,
                                metadata_book_ranking)
 from src.vkr_explain import explain_and_rerank
+from src.vkr_book_eval import evaluate_book_retrieval_proxy
+
+
+def file_sha256(path: Path) -> str:
+    """Fingerprint the exact bytes used by this research run."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run_pipeline(raw_dir: Path, processed_dir: Path, results_dir: Path, *,
@@ -40,6 +51,7 @@ def run_pipeline(raw_dir: Path, processed_dir: Path, results_dir: Path, *,
     train_seconds = time.perf_counter() - started
     save_embeddings(embeddings, results_dir / "embeddings")
     user_metrics = evaluate_user_holdout(embeddings, train, test)
+    book_proxy_metrics = evaluate_book_retrieval_proxy(graph, embeddings, train, test)
 
     books = sorted(n for n, attrs in graph.nodes(data=True)
                    if attrs.get("entity_type") == "book")
@@ -64,15 +76,28 @@ def run_pipeline(raw_dir: Path, processed_dir: Path, results_dir: Path, *,
                 graph, candidates, chosen, method="informative", mode="rerank",
                 alpha=0.2)[:10],
         }
+    input_digests = {name: file_sha256(raw_dir / name) for name in
+                     ("BX-Books.csv", "BX-Book-Ratings.csv")}
+    embeddings_dir = results_dir / "embeddings"
+    artifact_digests = {
+        "knowledge_graph": file_sha256(processed_dir / "vkr_knowledge_graph.graphml"),
+        "embeddings": file_sha256(embeddings_dir / "vkr_n2v.npy"),
+        "embedding_ids": file_sha256(embeddings_dir / "vkr_n2v_ids.json"),
+        "train_ratings": file_sha256(processed_dir / "vkr_train_ratings.csv"),
+        "test_ratings": file_sha256(processed_dir / "vkr_test_ratings.csv"),
+    }
     report = {
-        "status": "unverified_on_real_Book_Crossing",
+        "status": "run_completed_source_provenance_not_independently_verified",
         "preparation": preparation,
         "train_seconds": train_seconds,
+        "input_sha256": input_digests,
+        "artifact_sha256": artifact_digests,
         "parameters": {
             "model": "Node2Vec", "seed": seed, "dimensions": dimensions,
             "walk_length": walk_length, "num_walks": num_walks, "epochs": epochs,
         },
         "user_to_book_holdout": user_metrics,
+        "book_to_book_proxy_holdout": book_proxy_metrics,
         "book_to_book_demonstration_no_ground_truth": demonstration,
     }
     destination = results_dir / "metrics" / "vkr_pipeline_report.json"
