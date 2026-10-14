@@ -27,7 +27,7 @@ jobs:
       - name: Check app syntax
         run: python -m compileall -q src/vkr_app.py
       - name: Run isolated VKR tests
-        run: python -m pytest -q tests/test_vkr_foundation.py tests/test_vkr_recommend_explain.py tests/test_vkr_pipeline.py tests/test_vkr_dashboard.py tests/test_vkr_book_eval.py tests/test_vkr_app_plot.py
+        run: python -m pytest -q tests/test_vkr_foundation.py tests/test_vkr_recommend_explain.py tests/test_vkr_pipeline.py tests/test_vkr_dashboard.py tests/test_vkr_book_eval.py tests/test_vkr_app_plot.py tests/test_vkr_real_data_regressions.py
   streamlit_smoke:
     runs-on: ubuntu-latest
     steps:
