@@ -112,9 +112,10 @@ def run_study(raw_dir: Path, output_dir: Path, *, mode: str = "quick",
                 "validation_coverage": proxy["coverage"],
             }
             experiments.append(row)
-            # Only validation influences selection. Timings break exact ties.
+            # Validation metrics select; deterministic ID/seed break exact ties.
+            # Wall-clock timing must never determine the selected model.
             key = (row["validation_ndcg@10"], row["validation_p@10"],
-                   -row["train_seconds"], -config_id, -seed)
+                   -config_id, -seed)
             if best_key is None or key > best_key:
                 best_key, best_row, best_embeddings, best_validation = key, row, embeddings, proxy
 
