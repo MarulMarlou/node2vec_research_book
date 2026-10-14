@@ -25,7 +25,7 @@ def _read_bx(path: Path, required: set[str]) -> pd.DataFrame:
         raise FileNotFoundError(f"Missing Book-Crossing file: {path}")
     # The original BX distribution is semicolon-delimited and latin-1 encoded.
     df = pd.read_csv(path, sep=";", encoding="latin-1", dtype=str,
-                     on_bad_lines="warn", low_memory=False)
+                     escapechar="\\", on_bad_lines="error", low_memory=False)
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"{path.name}: missing columns {sorted(missing)}")
