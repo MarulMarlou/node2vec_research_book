@@ -40,7 +40,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 .\.venv-vkr\Scripts\python.exe -m src.vkr_embedding_study --mode quick --max-users 150 --max-books 1000
 ```
 
-Расширенная сетка `--mode full` содержит 12 конфигураций Node2Vec × 3 фиксированных seed (36 запусков) и может быть ресурсоёмкой. **Это не сравнение с TransE**, предусмотренное дальнейшим этапом.
+Расширенная сетка `--mode full` содержит 12 конфигураций Node2Vec × 3 фиксированных seed (36 запусков) и может быть ресурсоёмкой. **Это не сравнение с TransE.**
+
+### Новое: контролируемое сравнение Node2Vec и TransE (этап стажировки)
+
+Отдельный сценарий `src/vkr_compare_embeddings.py` обучает **оба алгоритма** на едином train-only типизированном графе, выбирает конфигурацию каждого по validation и использует test только после выбора. В отличие от прежних прогонов, в нём отдельно откладываются реально наблюдавшиеся низкие оценки (1–6), что позволяет считать ROC-AUC на явно размеченных положительных/низких рейтингах, **не называя все неизвестные пары отрицательными**.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-quick -SkipInstall
+```
+
+Режим `compare-full` задаёт **42 запуска (24 Node2Vec и 18 TransE)** на уменьшенном графе, но их выполнение **ещё необходимо подтвердить результатами**. Отчёты сохраняются в `results/comparison/`, отдельно от Streamlit. Код сравнения проверен синтетическими тестами; **результаты 42 запусков на реальном Book-Crossing пока не заявляются**. См. [аудит всех исходных требований](docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md) и [второй этап](docs/VKR_STAGE2.md).
 
 Полная пошаговая инструкция: [QUICK_START.md](QUICK_START.md).
 
