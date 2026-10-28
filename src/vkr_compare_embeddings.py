@@ -26,6 +26,11 @@ from src.vkr_metrics import ranking_metrics
 
 
 def comparison_grid(mode: str) -> dict[str, list[dict]]:
+    """One-factor-at-a-time screening of each model's relevant parameters.
+
+    The larger study has 12 Node2Vec + 9 TransE settings, each with 2 seeds:
+    42 actual fits if fully executed. A grid definition is not an experiment.
+    """
     if mode == "quick":
         return {
             "Node2Vec": n2v_configs("quick")[:2],
@@ -35,16 +40,27 @@ def comparison_grid(mode: str) -> dict[str, list[dict]]:
                 for lr in (0.025, 0.05)],
         }
     if mode == "full":
+        n2v_base = {"dimensions": 64, "walk_length": 20, "num_walks": 4,
+                    "epochs": 3, "p": 1.0, "q": 1.0, "window": 5}
+        n2v_changes = [
+            {}, {"p": 0.5}, {"p": 2.0}, {"q": 0.5}, {"q": 2.0},
+            {"dimensions": 32}, {"dimensions": 128},
+            {"walk_length": 10}, {"walk_length": 40},
+            {"num_walks": 2}, {"window": 3}, {"epochs": 5},
+        ]
+        transe_base = {"dimensions": 64, "epochs": 8, "batch_size": 256,
+                       "learning_rate": 0.05, "margin": 1.0}
+        transe_changes = [
+            {}, {"dimensions": 32}, {"dimensions": 128},
+            {"learning_rate": 0.025}, {"learning_rate": 0.1},
+            {"batch_size": 128}, {"batch_size": 512},
+            {"margin": 0.5}, {"epochs": 12},
+        ]
         return {
-            "Node2Vec": n2v_configs("full"),  # 12 × 2 seeds = 24 runs
-            "TransE": [
-                {"dimensions": dim, "epochs": 8, "batch_size": 256,
-                 "learning_rate": lr, "margin": 1.0}
-                for dim in (32, 64, 128) for lr in (0.025, 0.05, 0.1)
-            ],  # 9 × 2 seeds = 18 runs; total 42
+            "Node2Vec": [{**n2v_base, **change} for change in n2v_changes],
+            "TransE": [{**transe_base, **change} for change in transe_changes],
         }
     raise ValueError("mode must be quick or full")
-
 
 def _signed_split(ratings: pd.DataFrame, *, max_users: int, max_books: int,
                   seed: int, threshold: int = 7
