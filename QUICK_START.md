@@ -65,3 +65,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 Режим `study-full` — **36 запусков Node2Vec на уменьшенном графе**; может выполняться заметно дольше. Он не является сравнением с TransE и **не закрывает второй этап самостоятельно**.
 
 Другие команды: `-Mode main` — до 1 000 пользователей / 5 000 книг; `-Mode tests` — тесты. При повторных запусках `quick`/`main` основные артефакты перезаписываются. Для повторных запусков используйте `-SkipInstall` после установки зависимостей.
+
+## 7. Сравнение Node2Vec и TransE (новый второй этап)
+
+```powershell
+# 4 пробных сравнения: 2 Node2Vec и 2 TransE
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-quick -SkipInstall
+
+# 42 подготовленных сравнительных эксперимента
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-full -SkipInstall
+```
+
+Результаты сохраняются в `results/comparison/comparison_report.json` и `comparison_experiments.csv`. Сравниваются **одинаковые** train/validation/test и каталоги; ROC-AUC рассчитан на явно оценённых высоко/низко книгах, не на отсутствующих оценках. **Наличие 42 конфигураций не означает, что фактические запуски уже проведены.** См. [аудит исходных требований](docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md).
