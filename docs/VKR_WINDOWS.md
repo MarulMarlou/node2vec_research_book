@@ -131,7 +131,23 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
-## 7. Частые вопросы
+## 7. Новый сравнительный эксперимент Node2Vec и TransE
+
+Это **отдельный** эксперимент и отдельная папка результатов. Он не перезаписывает основной Streamlit-конвейер:
+
+```powershell
+# Четыре опытных запуска: по две конфигурации каждого алгоритма, 1 seed
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-quick -SkipInstall
+
+# Большая сравнительная сетка: 42 запуска, 2 seed
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-full -SkipInstall
+```
+
+Сводка появится в `results/comparison/comparison_report.json`, полная таблица попыток — в `comparison_experiments.csv`. Обе модели используют идентичное разбиение на train/validation/test и общий каталог для user→book; ROC-AUC измеряется **только по отложенным явно выставленным оценкам обоих классов**. Запуски `compare-quick` и `compare-full` перезаписывают **один и тот же** каталог `results/comparison`: архивируйте предыдущие отчёты перед новой серией.
+
+**Обратите внимание:** сам код и синтетические проверки не свидетельствуют о том, что 42 реальных запуска уже выполнены. Не смешивайте результаты этого сценария с `study-full` и `vkr_pipeline`.
+
+## 8. Частые вопросы
 
 | Сообщение | Что сделать |
 |---|---|
