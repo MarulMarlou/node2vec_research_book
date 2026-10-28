@@ -134,7 +134,13 @@ def evaluate_user_ranking(
             ranking = transe_rank_user_books(embeddings, user_id, candidates)
         rankings = [book for book, _ in ranking]
         score_by_book = dict(ranking)
-        metrics.append(ranking_metrics(rankings, positives, ks=ks))
+        metric_row = ranking_metrics(rankings, positives, ks=ks)
+        # Report MRR separately for k=5,10,20, not only at max(k).
+        for k in ks:
+            first = next((i + 1 for i, book in enumerate(rankings[:k])
+                          if book in positives), None)
+            metric_row[f"mrr@{k}"] = 1.0 / first if first is not None else 0.0
+        metrics.append(metric_row)
         pos_values = [score_by_book[b] for b in sorted(positives & book_set) if b in score_by_book]
         neg_values = [score_by_book[b] for b in sorted(negatives & book_set) if b in score_by_book]
         user_auc = _auc_explicit(pos_values, neg_values)
@@ -144,7 +150,7 @@ def evaluate_user_ranking(
             auc.append(user_auc)
     if not metrics:
         raise ValueError("No holdout users with positive ratings")
-    summary = {("mrr@20" if key == "rr" else key):
+    summary = {("rr_at_max_k" if key == "rr" else key):
                float(np.mean([row[key] for row in metrics]))
                for key in metrics[0]}
     summary.update({
