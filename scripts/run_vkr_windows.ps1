@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall
 )
@@ -50,6 +50,14 @@ foreach ($file in $required) {
     if (-not (Test-Path $file)) {
         throw "Required Book-Crossing CSV missing: $file"
     }
+}
+if ($Mode -eq "compare-quick" -or $Mode -eq "compare-full") {
+    $ComparisonMode = if ($Mode -eq "compare-quick") { "quick" } else { "full" }
+    Write-Host "Node2Vec vs TransE comparative study ($ComparisonMode). Output: results/comparison"
+    & $python -m src.vkr_compare_embeddings --mode $ComparisonMode --max-users 150 --max-books 1000
+    if ($LASTEXITCODE -ne 0) { throw "Comparative study failed" }
+    Write-Host "Comparison completed. See results/comparison/comparison_report.json and comparison_experiments.csv"
+    exit 0
 }
 if ($Mode -eq "study-quick" -or $Mode -eq "study-full") {
     $StudyMode = if ($Mode -eq "study-quick") { "quick" } else { "full" }
