@@ -32,6 +32,7 @@ Thumbs.db
 # Fresh VKR model artifacts and evaluation runs
 /results/embeddings/
 /results/study/
+/results/comparison/
 /results/metrics/vkr_*.json
 /results/metrics/vkr_*.csv
 /results/plots/vkr_*.png
