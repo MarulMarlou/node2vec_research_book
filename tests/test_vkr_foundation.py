@@ -95,3 +95,34 @@ def test_zero_ratings_not_treated_as_negative(tmp_path):
     ratings.drop(columns=["source_row"]).to_csv(raw / "BX-Book-Ratings.csv", sep=";", encoding="latin-1", index=False)
     _, cleaned = load_book_crossing(raw)
     assert 0 not in set(cleaned["Book-Rating"])
+
+
+
+def test_genre_coverage_reports_partial_without_claiming_completion(tmp_path):
+    books, ratings = fixture_data()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    books.drop(columns=["source_row"]).to_csv(
+        raw / "BX-Books.csv", sep=";", encoding="latin-1", index=False)
+    ratings.drop(columns=["source_row"]).to_csv(
+        raw / "BX-Book-Ratings.csv", sep=";", encoding="latin-1", index=False)
+    path = tmp_path / "genre.csv"
+    pd.DataFrame([{"isbn": "001", "genre": "Fantasy",
+                   "source_url": "https://openlibrary.org/works/OL123W.json"}]
+                 ).to_csv(path, index=False)
+    prep = prepare(raw, tmp_path / "processed", genre_csv=path,
+                   max_users=None, max_books=None)
+    assert prep["genre_fact_edges"] == 1
+    assert prep["genre_books_covered"] == 1
+    assert prep["genre_book_coverage"] < 1
+    assert prep["genre_source_urls"] == 1
+    assert "Partial genre coverage" in prep["warning"]
+
+
+def test_genre_provenance_requires_absolute_https(tmp_path):
+    from src.vkr_prepare import load_genres
+    file = tmp_path / "bad.csv"
+    pd.DataFrame([{"isbn": "001", "genre": "Fantasy",
+                   "source_url": "http://example.org/unverified"}]).to_csv(file, index=False)
+    with pytest.raises(ValueError, match="HTTPS"):
+        load_genres(file)
