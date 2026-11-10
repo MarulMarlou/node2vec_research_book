@@ -166,11 +166,39 @@ def _cohort_evaluation(
     by_config: dict[tuple[str, str, float], list[dict]] = {
         (c["method"], c["mode"], c["alpha"]): [] for c in active_configs
     }
+    candidate_ceiling_rows: list[dict] = []
+    # All candidate-recall diagnostics are descriptive: holdout labels are
+    # NEVER used to choose the pool, model, alpha or path explanation.
+    model_catalog = {str(node) for node in embeddings.index
+                     if str(node).startswith("book:")}
     for user in users:
         anchors = sorted(liked.get(user, set()))[:3]
-        pool = _prepared_candidates(
+        # One deterministic cosine candidate order; evaluating a top-100
+        # ceiling does not imply explaining or reranking those 100 books.
+        base_order = _prepared_candidates(
             embeddings, seen.get(user, set()), anchors,
-            candidate_pool=candidate_pool)
+            candidate_pool=max(100, candidate_pool))
+        pool = base_order[:candidate_pool]
+        positive = truth.get(user, set())
+        source_pool = {r["book_id"] for r in pool}
+        top25 = {r["book_id"] for r in base_order[:25]}
+        top100 = {r["book_id"] for r in base_order[:100]}
+        candidates_available = positive & model_catalog
+        denominator = len(positive)
+        candidate_ceiling_rows.append({
+            "model_catalog_has_positive": bool(candidates_available),
+            "base_top25_has_positive": bool(positive & top25),
+            "base_top100_has_positive": bool(positive & top100),
+            "chosen_pool_has_positive": bool(positive & source_pool),
+            "model_catalog_positive_recall": (
+                len(candidates_available) / denominator if denominator else 0.0),
+            "base_top25_positive_recall": (
+                len(positive & top25) / denominator if denominator else 0.0),
+            "base_top100_positive_recall": (
+                len(positive & top100) / denominator if denominator else 0.0),
+            "chosen_pool_positive_recall": (
+                len(positive & source_pool) / denominator if denominator else 0.0),
+        })
         for method in methods:
             rows = _collect_explanations(graph, pool, method=method,
                                          max_depth=max_depth, max_paths=max_paths,
@@ -221,10 +249,26 @@ def _cohort_evaluation(
         }
         results.append({**config, "config_id": i + 1, "users_evaluated": len(users),
                         **aggregate})
+    diagnostics = {
+        "users": len(candidate_ceiling_rows),
+        "catalog_has_positive_users": sum(
+            r["model_catalog_has_positive"] for r in candidate_ceiling_rows),
+        "top25_has_positive_users": sum(
+            r["base_top25_has_positive"] for r in candidate_ceiling_rows),
+        "top100_has_positive_users": sum(
+            r["base_top100_has_positive"] for r in candidate_ceiling_rows),
+        "chosen_pool_has_positive_users": sum(
+            r["chosen_pool_has_positive"] for r in candidate_ceiling_rows),
+    }
+    for field in ("model_catalog_positive_recall", "base_top25_positive_recall",
+                  "base_top100_positive_recall", "chosen_pool_positive_recall"):
+        diagnostics["mean_" + field] = float(np.mean(
+            [r[field] for r in candidate_ceiling_rows]))
     summary = {"cohort_users": len(users), "eligible_users_total": int(total_users),
                "evaluated_users_fraction": len(users) / total_users,
                "candidate_pool": candidate_pool, "max_paths": max_paths,
-               "max_expansions": max_expansions, "results": results}
+               "max_expansions": max_expansions, "results": results,
+               "candidate_ceiling": diagnostics}
     if collect_per_user:
         # Users retain the same stable order for each method; IDs are not
         # emitted. This enables strictly paired uncertainty calculations.
@@ -357,6 +401,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         "max_expansions": max_expansions,
         "candidate_pool": candidate_pool,
         "validation": val_report,
+        "candidate_ceiling_validation": val_report["candidate_ceiling"],
         "selected": best,
         "best_rerank_validation": best_rerank,
         "test_selected": choose(test_report["results"], best["method"], best["mode"], best["alpha"]),
@@ -365,6 +410,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
                                    best_rerank["alpha"]),
         "test_cohort_size": test_report["cohort_users"],
         "test_eligible_user_total": test_report["eligible_users_total"],
+        "candidate_ceiling_test": test_report["candidate_ceiling"],
         "paired_rerank_vs_posthoc": paired_uncertainty,
         "paired_results_csv": "explanation_test_paired_deltas.csv",
         "source_sha256": {
@@ -381,6 +427,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
             "Informative search may be truncated; report truncation rate and search budgets.",
             "Explanation time includes Python search and depends on the machine.",
             "Random per-user splits are not chronological.",
+            "Candidate ceilings are descriptive diagnostics from held-out labels, not tuning criteria; model catalog and top25/top100 recall are bounded by the fixed sampled graph.",
             "Paired bootstrap CI is conditional on this one fixed train/test split, trained model, and selected user cohort; it does not quantify model/split uncertainty.",
             "User-level deltas are anonymized by positional index, with no Book-Crossing user identifiers saved.",
         ],
