@@ -77,6 +77,9 @@ def test_explanation_study_chooses_on_validation_and_holds_test(tmp_path):
     assert 0 <= report["test_selected"]["explanation_coverage"] <= 1
     assert 0 <= report["test_selected"]["ndcg@10"] <= 1
     assert "mrr@5" in report["test_selected"] and "mrr@10" in report["test_selected"]
+    assert report["validation"]["max_paths"] == 50
+    assert report["validation"]["max_expansions"] == 400
+    assert report["max_paths"] == 50 and report["max_expansions"] == 400
     assert (tmp_path / "results" / "explanation_validation_grid.csv").is_file()
     assert (tmp_path / "results" / "explanation_study_report.json").is_file()
     assert (tmp_path / "results" / "train_only_node2vec" / "vkr_n2v.npy").is_file()
