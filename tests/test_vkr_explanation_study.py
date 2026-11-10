@@ -84,6 +84,12 @@ def test_explanation_study_chooses_on_validation_and_holds_test(tmp_path):
     assert (tmp_path / "results" / "explanation_study_report.json").is_file()
     assert (tmp_path / "results" / "explanation_test_paired_deltas.csv").is_file()
     assert report["paired_rerank_vs_posthoc"]["users"] == report["test_cohort_size"]
+    ceiling = report["candidate_ceiling_test"]
+    assert ceiling["users"] == report["test_cohort_size"]
+    assert 0 <= ceiling["top25_has_positive_users"] <= ceiling["top100_has_positive_users"] <= ceiling["catalog_has_positive_users"] <= ceiling["users"]
+    assert 0 <= ceiling["mean_base_top25_positive_recall"] <= ceiling["mean_base_top100_positive_recall"] <= ceiling["mean_model_catalog_positive_recall"] <= 1
+    assert ceiling["chosen_pool_has_positive_users"] == ceiling["top25_has_positive_users"] or report["test_cohort_size"] <= 3
+
     assert abs(report["paired_rerank_vs_posthoc"]["ndcg@10"]["mean_delta"] -
                (report["test_best_rerank"]["ndcg@10"] -
                 report["test_posthoc_control"]["ndcg@10"])) < 1e-12
@@ -142,3 +148,33 @@ def test_paired_bootstrap_is_deterministic_and_no_user_ids_are_exported():
     assert not first.isnull().any().any()
     with pytest.raises(ValueError, match="same nonempty cohort"):
         paired_bootstrap(reranker[:2], baseline, seed=17)
+
+
+
+def test_candidate_ceiling_is_independent_of_explanation_method_and_pool_order(tmp_path):
+    raw = tmp_path / "raw"
+    sample_bx(raw)
+    from src.vkr_prepare import load_book_crossing, build_knowledge_graph, node2vec_projection
+    from src.vkr_embedding_study import three_way_split
+    from src.vkr_recommend import train_node2vec
+    books, ratings = load_book_crossing(raw)
+    train, _, test = three_way_split(ratings, max_users=6, max_books=20, seed=2042)
+    graph = build_knowledge_graph(books, train)
+    embeddings = train_node2vec(node2vec_projection(graph),
+                                dimensions=8, walk_length=6, num_walks=2,
+                                epochs=1, seed=42)
+    configs = [
+        {"method": "shortest", "mode": "posthoc", "alpha": 0.0},
+        {"method": "shortest", "mode": "rerank", "alpha": 0.5},
+    ]
+    evaluated = _cohort_evaluation(
+        graph, embeddings, train, test, max_evaluated_users=3,
+        candidate_pool=20, seed=77, configs=configs)
+    diag = evaluated["candidate_ceiling"]
+    assert diag["users"] == evaluated["cohort_users"]
+    assert diag["chosen_pool_has_positive_users"] <= diag["top25_has_positive_users"]
+    assert diag["top25_has_positive_users"] <= diag["top100_has_positive_users"]
+    assert diag["top100_has_positive_users"] <= diag["catalog_has_positive_users"]
+    assert diag["mean_chosen_pool_positive_recall"] <= diag["mean_base_top25_positive_recall"] + 1e-12
+    assert diag["mean_base_top25_positive_recall"] <= diag["mean_base_top100_positive_recall"] + 1e-12
+    assert diag["mean_base_top100_positive_recall"] <= diag["mean_model_catalog_positive_recall"] + 1e-12
