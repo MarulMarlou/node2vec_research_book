@@ -67,6 +67,11 @@ def test_explanation_study_chooses_on_validation_and_holds_test(tmp_path):
     assert report["test_selected"]["mode"] == best["mode"]
     assert report["test_selected"]["alpha"] == best["alpha"]
     assert report["test_posthoc_control"]["mode"] == "posthoc"
+    assert report["best_rerank_validation"]["mode"] == "rerank"
+    assert report["test_best_rerank"]["mode"] == "rerank"
+    assert report["test_best_rerank"]["method"] == report["best_rerank_validation"]["method"]
+    assert report["test_best_rerank"]["alpha"] == report["best_rerank_validation"]["alpha"]
+    assert "ndcg@10" in report["test_best_rerank"]
     assert report["test_cohort_size"] <= 3
     assert report["test_selected"]["users_evaluated"] <= 3
     assert 0 <= report["test_selected"]["explanation_coverage"] <= 1
