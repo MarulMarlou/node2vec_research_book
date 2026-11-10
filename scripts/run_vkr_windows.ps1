@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "explanations", "explanations-depth4", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -49,6 +49,13 @@ if ($Mode -eq "faithfulness") {
     Write-Host "See results/faithfulness/faithfulness_report.json and faithfulness_pairs.csv"
     exit 0
 }
+if ($Mode -eq "faithfulness-extended") {
+    Write-Host "Extended train-only faithfulness ablation, 4 pairs, 20 degree-aware null controls per pair"
+    & $python -m src.vkr_faithfulness --max-pairs 4 --controls 20 --output-dir results/faithfulness_extended
+    if ($LASTEXITCODE -ne 0) { throw "Extended faithfulness study failed" }
+    Write-Host "See results/faithfulness_extended/faithfulness_report.json and faithfulness_pairs.csv"
+    exit 0
+}
 if ($Mode -eq "app") {
     if (-not (Test-Path "results\embeddings\vkr_n2v.npy")) {
         throw "Embeddings missing: run the 'quick' or 'main' mode first."
@@ -80,6 +87,13 @@ if ($UseGenres) {
         throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
     }
     $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
+if ($Mode -eq "explanations-budget") {
+    Write-Host "High-budget explanation method study on a fresh split 2062, depth4, 40 evaluation users"
+    & $python -m src.vkr_explanation_study --output-dir results/explanation_study_budget --max-users 150 --max-books 1000 --max-evaluated-users 40 --candidate-pool 25 --max-depth 4 --split-seed 2062 --max-paths 200 --max-expansions 5000 @genreArgs
+    if ($LASTEXITCODE -ne 0) { throw "High-budget explanation study failed" }
+    Write-Host "See results/explanation_study_budget/explanation_study_report.json"
+    exit 0
 }
 if ($Mode -eq "explanations-depth4") {
     Write-Host "Independent depth-4 explanation study (new split seed 2052). Output: results/explanation_study_depth4"
