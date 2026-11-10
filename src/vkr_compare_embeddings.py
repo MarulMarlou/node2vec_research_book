@@ -276,7 +276,21 @@ def run_comparison(
         popularity_test = evaluate_user_ranking(
             None, train, test, method="Popularity")
     csv_file = output_dir / "comparison_experiments.csv"
-    pd.DataFrame(rows).to_csv(csv_file, index=False)
+    table = pd.DataFrame(rows)
+    table.to_csv(csv_file, index=False)
+    # Across-seed variability is useful for interpreting the 42-run study.
+    # With only one seed (quick), std is undefined and remains blank in CSV.
+    grouped = table.groupby(["algorithm", "config_id"], sort=True)
+    summary = grouped.agg(
+        runs=("seed", "size"),
+        validation_ndcg10_mean=("validation_ndcg@10", "mean"),
+        validation_ndcg10_std=("validation_ndcg@10", "std"),
+        validation_p10_mean=("validation_p@10", "mean"),
+        validation_p10_std=("validation_p@10", "std"),
+        train_seconds_mean=("train_seconds", "mean"),
+        train_seconds_std=("train_seconds", "std"),
+    ).reset_index()
+    summary.to_csv(output_dir / "comparison_config_summary.csv", index=False)
     # Save only models selected via validation; never log raw held-out IDs in report.
     save_embeddings(models["Node2Vec"], output_dir / "selected_node2vec")
     transe = models["TransE"]
@@ -292,6 +306,7 @@ def run_comparison(
         "graph": {"nodes": graph.number_of_nodes(), "edges": graph.number_of_edges(),
                   "relations": sorted({str(edge["relation"]) for _, _, edge in graph.edges(data=True)})},
         "experiments": len(rows),
+        "config_summary_csv": "comparison_config_summary.csv",
         "popularity_baseline": {"validation": popularity_validation,
                                 "test": popularity_test},
         "experiments_by_method": {name: len(grid[name]) * len(seeds)
