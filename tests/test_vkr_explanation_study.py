@@ -8,7 +8,7 @@ import networkx as nx
 
 from src.vkr_explanation_study import (
     _cohort_evaluation, _prepared_candidates, _rank,
-    explanation_configs, run_explanation_study,
+    explanation_configs, run_explanation_study, paired_bootstrap,
 )
 
 
@@ -82,6 +82,15 @@ def test_explanation_study_chooses_on_validation_and_holds_test(tmp_path):
     assert report["max_paths"] == 50 and report["max_expansions"] == 400
     assert (tmp_path / "results" / "explanation_validation_grid.csv").is_file()
     assert (tmp_path / "results" / "explanation_study_report.json").is_file()
+    assert (tmp_path / "results" / "explanation_test_paired_deltas.csv").is_file()
+    assert report["paired_rerank_vs_posthoc"]["users"] == report["test_cohort_size"]
+    assert abs(report["paired_rerank_vs_posthoc"]["ndcg@10"]["mean_delta"] -
+               (report["test_best_rerank"]["ndcg@10"] -
+                report["test_posthoc_control"]["ndcg@10"])) < 1e-12
+    anonymized = pd.read_csv(tmp_path / "results" / "explanation_test_paired_deltas.csv")
+    assert len(anonymized) == report["test_cohort_size"]
+    assert not any("user-id" in col.lower() or col.lower() == "userid"
+                   for col in anonymized.columns)
     assert (tmp_path / "results" / "train_only_node2vec" / "vkr_n2v.npy").is_file()
     assert len(json.loads(
         (tmp_path / "results" / "explanation_study_report.json").read_text())[
@@ -109,3 +118,27 @@ def test_only_requested_explanation_configs_scored_on_test(tmp_path):
     assert len(result["results"]) == 2
     assert {x["mode"] for x in result["results"]} == {"posthoc", "rerank"}
     assert {x["method"] for x in result["results"]} == {"shortest"}
+
+
+
+def test_paired_bootstrap_is_deterministic_and_no_user_ids_are_exported():
+    baseline = [
+        {"ndcg@10": 0.1, "p@10": 0.0, "mrr@10": 0.0, "explanation_coverage": 0.8},
+        {"ndcg@10": 0.2, "p@10": 0.1, "mrr@10": 0.5, "explanation_coverage": 0.9},
+        {"ndcg@10": 0.2, "p@10": 0.1, "mrr@10": 0.0, "explanation_coverage": 0.9},
+    ]
+    reranker = [dict(r, **{"ndcg@10": r["ndcg@10"] + v})
+                for r, v in zip(baseline, [0.03, 0.01, -0.01])]
+    first, summary = paired_bootstrap(reranker, baseline, seed=17, replicates=300)
+    second, other = paired_bootstrap(reranker, baseline, seed=17, replicates=300)
+    pd.testing.assert_frame_equal(first, second)
+    assert summary == other
+    assert abs(summary["ndcg@10"]["mean_delta"] - 0.01) < 1e-12
+    assert summary["ndcg@10"]["users_improved"] == 2
+    assert summary["ndcg@10"]["users_declined"] == 1
+    assert summary["ndcg@10"]["users_tied"] == 0
+    assert summary["ndcg@10"]["bootstrap_ci95"][0] <= 0.01 <= summary["ndcg@10"]["bootstrap_ci95"][1]
+    assert "User-ID" not in first.columns
+    assert not first.isnull().any().any()
+    with pytest.raises(ValueError, match="same nonempty cohort"):
+        paired_bootstrap(reranker[:2], baseline, seed=17)
