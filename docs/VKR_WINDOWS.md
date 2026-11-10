@@ -131,6 +131,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## Итоги candidate-ceiling и следующий шаг после split=2092
+
+[Подтверждённый реальный эксперимент](VKR_STAGE3_CANDIDATE_CEILING_2026-11-10.md) показал: **81/120** test-пользователей не имеют ни одной положительной книги в первых 25 cosine-кандидатах, хотя все 120 имеют таковые в model catalog; первые 100 содержат хотя бы один positive у 77/120. Поэтому увеличение или изменение начального пула кандидатов важнее повторной оптимизации alpha. По test informative/rerank α=0,5 NDCG@10=0,033244 ниже posthoc=0,035940, а paired CI разности пересекает ноль.
+
+**Следующая Windows-команда** (после git pull, тестов и проверки наличия Book-Crossing CSV):
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-pool-compare -SkipInstall
+\`\`\`
+
+Она обучает Node2Vec **один раз** на новом split=2102, сравнивает pool25/pool100 на одной test-когорте и заранее разделяет эффект размера пула и эффект разных конфигураций, выбранных по validation. Итог в \`results/candidate_pool_study/\`: \`candidate_pool_study_report.json\`, \`candidate_pool_validation_grid.csv\`, \`candidate_pool_test_fixed_configuration_deltas.csv\`, \`candidate_pool_test_selected_pipeline_deltas.csv\`. [Детальная методика](VKR_CANDIDATE_POOL_25_VS_100_PROTOCOL_2026-11-10.md). Новые результаты **ещё не измерены на реальном каталоге**.
+
 ## После первого парного bootstrap: дальнейшая диагностика каталога и кандидатов
 
 [Результат реального split=2082](VKR_STAGE3_PAIRED_BOOTSTRAP_2026-11-10.md): 80 test-пользователей, выбранный по validation `shortest+rerank α=0,5` дал NDCG@10=0,032821, posthoc=0,028946; 95%-й user-level bootstrap CI Δ=[−0,001410; +0,009562] **пересекает ноль**. Более того, 66 из 80 пользователей не получили релевантных книг в top-10 ни в одном режиме.
