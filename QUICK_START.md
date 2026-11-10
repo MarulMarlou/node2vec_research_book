@@ -74,6 +74,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## Новый подтверждённый оптимизированный пилот и парные интервалы
+
+Реальный \`split=2072\`: **0% усечений informative на validation** после структурной оптимизации; лучший \`shortest+rerank α=0,2\`, test NDCG@10=0,066130 против 0,062838 у фиксированного posthoc. [Полный исследовательский отчёт](docs/VKR_STAGE3_OPTIMIZED_RESULTS_2026-11-10.md).
+
+Следующая независимая серия дополнительно сохраняет **пользовательские парные разницы без исходных User-ID** и условные bootstrap-интервалы:
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-paired -SkipInstall
+\`\`\`
+
+Новый split=2082; до 80 пользователей, результаты в \`results/explanation_study_paired/\`. **Это ещё не выполненный опыт**. Изменение в версии кода нельзя ретроспективно приписывать старому \`split=2072\`.
+
 ## После третьей серии: проверка оптимизированного поиска
 
 Получены результаты `explanations-budget` и `faithfulness-extended`. У informative 100% усечений даже при 200/5000; четыре пары с 20 degree-aware контролями каждая дают неодинаковые по силе эффекты и **не являются достаточным статистическим доказательством**. [Подробный отчёт по третьей серии](docs/VKR_STAGE3_SEARCH_BUDGET_AND_EXTENDED_FAITHFULNESS_2026-11-10.md).
