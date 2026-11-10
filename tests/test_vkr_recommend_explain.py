@@ -11,7 +11,7 @@ from src.vkr_prepare import build_knowledge_graph, node2vec_projection
 from src.vkr_recommend import (biased_walk, train_node2vec, cosine_ranking,
                                evaluate_user_holdout, metadata_book_ranking,
                                recommend_similar_books, save_embeddings, load_embeddings)
-from src.vkr_explain import find_explanations, explain_and_rerank
+from src.vkr_explain import find_explanations, explain_and_rerank, _rank_path, _valid_path
 
 
 def graph_fixture():
@@ -141,3 +141,51 @@ def test_invalid_options_rejected():
         find_explanations(graph, "book:1", "book:2", method="unknown")
     with pytest.raises(ValueError):
         explain_and_rerank(graph, [], "book:1", alpha=1.5)
+
+
+
+def test_informative_join_matches_exact_exhaustive_paths_on_small_graph():
+    graph = graph_fixture()
+    a, b = "book:1", "book:4"
+    undirected = graph.to_undirected(as_view=True)
+    brute = {
+        tuple(nodes)
+        for nodes in nx.all_simple_paths(undirected, a, b, cutoff=4)
+        if _valid_path(graph, nodes)
+    }
+    exhaustive = sorted(
+        brute, key=lambda nodes: (-_rank_path(graph, list(nodes)), len(nodes), nodes))
+    outcome = find_explanations(
+        graph, a, b, method="informative", max_depth=4,
+        top_n=4, max_paths=100, max_expansions=2000)
+    assert not outcome["truncated"]
+    assert [tuple(item["nodes"]) for item in outcome["paths"]] == exhaustive[:4]
+
+
+def test_informative_middle_book_join_avoids_expanding_dense_hub_walks():
+    g = nx.MultiDiGraph()
+    g.add_node("book:left", entity_type="book")
+    g.add_node("book:right", entity_type="book")
+    g.add_node("user:one", entity_type="user")
+    g.add_node("user:two", entity_type="user")
+
+    def rated(book, user, n):
+        g.add_edge(user, book, relation="rated", rating=9,
+                   source_file="BX-Book-Ratings.csv", source_row=str(n))
+
+    rated("book:left", "user:one", 1)
+    rated("book:right", "user:two", 2)
+    for n in range(80):
+        book = f"book:middle:{n:03d}"
+        g.add_node(book, entity_type="book")
+        rated(book, "user:one", 3 + 2*n)
+        rated(book, "user:two", 4 + 2*n)
+
+    found = find_explanations(
+        g, "book:left", "book:right", method="informative",
+        max_depth=4, top_n=3, max_paths=10, max_expansions=2)
+    assert not found["truncated"]
+    assert [p["length"] for p in found["paths"]] == [4, 4, 4]
+    assert [p["nodes"][2] for p in found["paths"]] == [
+        "book:middle:000", "book:middle:001", "book:middle:002"]
+    assert all(len(p["edges"]) == 4 for p in found["paths"])
