@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.vkr_compare_embeddings import (
-    _auc_explicit, _signed_split, comparison_grid, run_comparison
+    _auc_explicit, _signed_split, comparison_grid, run_comparison, evaluate_user_ranking
 )
 
 
@@ -62,6 +62,8 @@ def test_realistic_comparison_pipeline_with_explicit_auc(tmp_path):
     assert report["rows"]["train"] > 0
     assert report["rows"]["validation"] > 0
     assert report["rows"]["test"] > 0
+    assert 0 <= report["popularity_baseline"]["test"]["ndcg@10"] <= 1
+    assert report["popularity_baseline"]["test"]["auc_eligible_users"] > 0
     for method in ("Node2Vec", "TransE"):
         result = report["selected"][method]
         assert 0 <= result["test"]["ndcg@10"] <= 1
@@ -104,3 +106,24 @@ def test_catalog_selection_occurs_only_after_both_class_splits(tmp_path):
         got_pairs = set(zip(got["User-ID"], got["ISBN"]))
         expected_pairs = set(zip(expected["User-ID"], expected["ISBN"]))
         assert got_pairs == expected_pairs
+
+
+
+def test_popularity_baseline_uses_only_training_positive_counts():
+    train = pd.DataFrame([
+        {"User-ID": "u", "ISBN": "b1", "Book-Rating": 8},
+        {"User-ID": "v", "ISBN": "b2", "Book-Rating": 9},
+        {"User-ID": "w", "ISBN": "b2", "Book-Rating": 8},
+        {"User-ID": "v", "ISBN": "b3", "Book-Rating": 4},
+    ])
+    heldout = pd.DataFrame([
+        {"User-ID": "u", "ISBN": "b2", "Book-Rating": 9},
+        {"User-ID": "u", "ISBN": "b3", "Book-Rating": 2},
+    ])
+    report = evaluate_user_ranking(
+        None, train, heldout, method="Popularity")
+    assert report["positive_holdout_users"] == 1
+    assert report["p@5"] == 0.2
+    assert report["mrr@5"] == 1.0  # b2 has highest positive train popularity
+    assert report["auc_roc_explicit"] == 1.0  # known positive > low-rating book
+    assert report["auc_coverage"] == 1.0
