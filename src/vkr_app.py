@@ -19,6 +19,7 @@ import streamlit as st
 from src.vkr_dashboard import (ArtifactsError, compare_metadata_baseline,
                                list_books, load_dashboard_assets,
                                path_chart_data, recommend_for_display)
+from src.vkr_embedding_projection import project_embeddings_pca
 
 
 @st.cache_resource(show_spinner="Читаем подготовленный граф знаний и эмбеддинги…")
@@ -60,6 +61,32 @@ def draw_evidence_path(chart_data: dict) -> go.Figure:
                       hovermode="closest")
     return fig
 
+
+
+def draw_embedding_map(projection) -> go.Figure:
+    """Exploratory PCA scatter; marker overlap is not an evidence path."""
+    fig = go.Figure()
+    colors = {"book": "#3B82F6", "author": "#10B981", "publisher": "#F59E0B",
+              "genre": "#8B5CF6", "user": "#64748B"}
+    for entity_type in sorted(set(projection.points["type"])):
+        group = projection.points[projection.points["type"] == entity_type]
+        for focused in (False, True):
+            sub = group[group["highlighted"] == focused]
+            if sub.empty:
+                continue
+            fig.add_trace(go.Scattergl(
+                x=sub["x"].tolist(), y=sub["y"].tolist(), mode="markers",
+                name=entity_type + (" · выбранные" if focused else ""),
+                customdata=[[row["id"], row["label"]] for _, row in sub.iterrows()],
+                hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[0]}<extra></extra>",
+                marker=dict(size=16 if focused else 7, opacity=1 if focused else 0.55,
+                            color=colors.get(entity_type, "#94A3B8"),
+                            line=dict(width=2 if focused else 0,
+                                      color="#111827"))))
+    fig.update_layout(height=500, xaxis_title="PC1", yaxis_title="PC2",
+                      legend=dict(orientation="h", y=1.15),
+                      margin=dict(t=25, b=20, l=20, r=20))
+    return fig
 
 def render() -> None:
     st.set_page_config(page_title="Объяснимые рекомендации книг · ВКР", page_icon="📚",
@@ -132,8 +159,9 @@ def render() -> None:
         st.warning(f'Для {response["truncated_count"]} рекомендаций поиск ограничен лимитом обхода: '
                    "не гарантирован наиболее информативный путь во всём графе.")
 
-    tab_main, tab_graph, tab_baseline, tab_eval = st.tabs([
-        "📖 Выдача", "🕸 Доказательства в графе", "⚖️ Контрольный метод", "📊 Оценка и ограничения"
+    tab_main, tab_graph, tab_baseline, tab_eval, tab_embeddings = st.tabs([
+        "📖 Выдача", "🕸 Доказательства в графе", "⚖️ Контрольный метод",
+        "📊 Оценка и ограничения", "🧭 Пространство эмбеддингов (PCA)"
     ])
     with tab_main:
         for item in results:
@@ -210,6 +238,26 @@ def render() -> None:
         st.info("Путь доказывает наличие связи в графе, но не причинное влияние "
                 "этой связи на оценку Node2Vec. Для faithfulness нужны отдельные "
                 "абляционные эксперименты с изменением графа и переобучением.")
+    with tab_embeddings:
+        st.subheader("Двумерная PCA-проекция текущих эмбеддингов Node2Vec")
+        st.caption("Проекция рассчитана на загруженной модели, а не на исторических рисунках "
+                   "предыдущей курсовой. Это обзор структуры векторов; расстояние на плоскости "
+                   "не доказывает качество рекомендаций или конкретную причинную связь.")
+        sample_limit = st.select_slider("Максимальное число отображаемых узлов",
+                                         options=[100, 250, 500, 750, 1000, 1500],
+                                         value=750)
+        highlighted = tuple([source] + [item["book_id"] for item in results])
+        with st.spinner("Рассчитываем главные компоненты…"):
+            projection = project_embeddings_pca(
+                assets.embeddings, assets.graph, max_nodes=sample_limit,
+                seed=42, include=highlighted)
+        st.plotly_chart(draw_embedding_map(projection), width="stretch")
+        st.caption(
+            f"Отображено {projection.sampled_nodes} из {projection.total_nodes} узлов. "
+            f"Доля дисперсии PC1: {projection.explained_variance_axes[0]:.1%}, "
+            f"PC2: {projection.explained_variance_axes[1]:.1%}. "
+            "Выделенные точки — исходная книга и рекомендации; остальные выбраны "
+            "детерминированно (seed=42). PCA рассчитана только на показанной подвыборке.")
     st.caption("База данных: Book-Crossing; внешние факты жанров допускаются "
                "только с указанием происхождения. Прототип предназначен для исследования.")
 
