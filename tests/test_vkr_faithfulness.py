@@ -7,7 +7,8 @@ import pytest
 
 from src.vkr_explain import find_explanations
 from src.vkr_faithfulness import (
-    ablate_explanation_path, ablate_matched_control, run_faithfulness)
+    ablate_explanation_path, ablate_matched_control,
+    ablate_degree_matched_control, run_faithfulness)
 from src.vkr_pipeline import run_pipeline
 
 
@@ -85,8 +86,42 @@ def test_faithfulness_full_synthetic_run(tmp_path):
     assert row["score_baseline_refit"] is not None
     assert row["score_baseline_saved"] is not None
     assert row["path_length"] == 2
+    assert row["controls_requested"] == 1
+    assert len(row["null_control_score_drops"]) == row["controls_valid"]
+    if row["controls_valid"]:
+        assert row["null_control_degree_mismatch_mean"] is not None
+        assert row["explanation_minus_control_score_drop"] is not None
     assert abs(row["score_baseline_saved"] - row["score_baseline_refit"]) < 0.0001
     assert (tmp_path / "faithfulness" / "faithfulness_pairs.csv").is_file()
     persisted = json.loads((tmp_path / "faithfulness" / "faithfulness_report.json").read_text())
     assert persisted["original_graph_edges"] > 0
     assert all("user:" not in str(key) for key in persisted["records"][0].keys())
+
+
+
+def test_degree_matched_controls_preserve_explanation_edges_and_report_mismatch():
+    graph = tiny_graph()
+    path = find_explanations(graph, "book:001", "book:002",
+                             method="shortest", max_depth=2)["paths"][0]
+    a, mismatch = ablate_degree_matched_control(graph, path, seed=11)
+    b, again = ablate_degree_matched_control(graph, path, seed=11)
+    assert a is not None and b is not None
+    assert mismatch == again == 0.0
+    assert set(a.edges(keys=True)) == set(b.edges(keys=True))
+    assert a.number_of_edges() == graph.number_of_edges() - 2
+    assert a.has_edge("book:001", "author:a")
+    assert a.has_edge("book:002", "author:a")
+    assert not a.has_edge("book:003", "author:b")
+    assert not a.has_edge("book:004", "author:b")
+    assert graph.number_of_edges() == 4
+
+
+def test_degree_matched_control_rejects_unverified_explanation():
+    graph = tiny_graph()
+    path = find_explanations(graph, "book:001", "book:002",
+                             method="shortest", max_depth=2)["paths"][0]
+    altered = dict(path)
+    altered["edges"] = [dict(e) for e in path["edges"]]
+    altered["edges"][0]["source_file"] = "fabricated.csv"
+    with pytest.raises(ValueError, match="provenance"):
+        ablate_degree_matched_control(graph, altered, seed=1)
