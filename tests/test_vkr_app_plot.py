@@ -25,3 +25,27 @@ def test_plot_draws_only_supplied_evidence(monkeypatch):
     assert sum(trace.mode == "lines" for trace in chart.data) == 2
     assert len(chart.layout.annotations) == 2
     assert all(a.text == "written_by" for a in chart.layout.annotations)
+
+
+
+def test_pca_plot_hides_user_ids_in_hover(monkeypatch):
+    import pandas as pd
+    from src.vkr_embedding_projection import Projection2D
+
+    fake_st = types.ModuleType("streamlit")
+    fake_st.cache_resource = lambda **kwargs: lambda f: f
+    monkeypatch.setitem(sys.modules, "streamlit", fake_st)
+    mod = importlib.import_module("src.vkr_app")
+    points = pd.DataFrame([
+        {"id": "book:001", "label": "Book", "type": "book",
+         "x": 0.0, "y": 0.0, "highlighted": True},
+        {"id": "user:secret123", "label": "User secret123", "type": "user",
+         "x": 1.0, "y": 0.1, "highlighted": False},
+    ])
+    result = Projection2D(points, (0.6, 0.3), 2, 2)
+    chart = mod.draw_embedding_map(result)
+    all_hover = " ".join(str(trace.customdata) for trace in chart.data)
+    assert "book:001" in all_hover
+    assert "user:secret123" not in all_hover
+    assert "User secret123" not in all_hover
+    assert "ID читателя скрыт" in all_hover
