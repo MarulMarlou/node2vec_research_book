@@ -74,6 +74,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## Проверенные пилотные результаты и новый depth-4 эксперимент
+
+На реальных данных 10.11.2026 проведено 8 проверок настроек объяснений на validation, выбран `shortest + posthoc`; итоговый test NDCG@10=0,033914 и покрытие объяснениями 87,5% для 20 пользователей. Отдельный faithfulness-пилот выполнен для двух пар (не является статистическим доказательством). [Сводные результаты и ограничения](docs/VKR_STAGE3_PILOT_2026-11-10.md).
+
+```powershell
+# Новый независимый split=2052, пути до 4 рёбер, 40 пользователей
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-depth4 -SkipInstall
+
+# Новые relation/degree-matched контроли (перезапишут локальные faithfulness файлы)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness -SkipInstall
+```
+
+Старые результаты по split=2042 не заменяются новым depth4; обе серии нужно хранить и сравнивать с указанием разных разбиений.
+
 ## Новые исследовательские режимы
 
 ```powershell
