@@ -1,0 +1,131 @@
+"""Methodology regression for fair Node2Vec/TransE comparisons."""
+from pathlib import Path
+import numpy as np
+import pandas as pd
+
+from src.vkr_compare_embeddings import (
+    _auc_explicit, _signed_split, comparison_grid, run_comparison, evaluate_user_ranking
+)
+
+
+def _make_synthetic_bx(raw: Path, *, users: int = 5, books: int = 15) -> None:
+    raw.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([
+        {"ISBN": f"{i:04d}", "Book-Title": f"Book {i}",
+         "Book-Author": f"Author {i % 4}", "Publisher": f"Pub {i % 3}"}
+        for i in range(1, books + 1)
+    ]).to_csv(raw / "BX-Books.csv", index=False, encoding="latin-1", sep=";")
+    pd.DataFrame([
+        {"User-ID": str(u), "ISBN": f"{i:04d}",
+         "Book-Rating": 8 if (i + u) % 3 else 3}
+        for u in range(1, users + 1) for i in range(1, books + 1)
+    ]).to_csv(raw / "BX-Book-Ratings.csv", index=False, encoding="latin-1", sep=";")
+
+
+def test_roc_auc_only_compares_explicit_heldout_positives_and_negatives():
+    assert _auc_explicit([0.8, 0.2], [0.1, 0.4]) == 0.75
+    assert _auc_explicit([0.5], [0.5]) == 0.5
+    assert _auc_explicit([], [0.4]) is None
+    assert _auc_explicit([0.3], []) is None
+
+
+def test_signed_split_heldout_lows_never_enter_training(tmp_path):
+    raw = tmp_path / "raw"
+    _make_synthetic_bx(raw)
+    from src.vkr_prepare import load_book_crossing
+    _, ratings = load_book_crossing(raw)
+    a = _signed_split(ratings, max_users=5, max_books=15, seed=2028)
+    b = _signed_split(ratings.sample(frac=1, random_state=10),
+                      max_users=5, max_books=15, seed=2028)
+    pa = [set(zip(x["User-ID"], x["ISBN"])) for x in a]
+    pb = [set(zip(x["User-ID"], x["ISBN"])) for x in b]
+    assert pa == pb
+    assert not pa[0] & pa[1] and not pa[0] & pa[2] and not pa[1] & pa[2]
+    assert (a[1]["Book-Rating"] < 7).any()
+    assert (a[2]["Book-Rating"] < 7).any()
+
+
+def test_realistic_comparison_pipeline_with_explicit_auc(tmp_path):
+    raw = tmp_path / "raw"
+    _make_synthetic_bx(raw)
+    out = tmp_path / "study"
+    grid = {
+        "Node2Vec": [{"dimensions": 8, "walk_length": 8, "num_walks": 2,
+                      "epochs": 2, "p": 1.0, "q": 1.0, "window": 3}],
+        "TransE": [{"dimensions": 8, "epochs": 3, "batch_size": 16,
+                    "learning_rate": 0.05, "margin": 1.0}],
+    }
+    report = run_comparison(raw, out, max_users=5, max_books=15,
+                            seeds=(42,), grid=grid)
+    assert report["experiments"] == 2
+    assert report["experiments_by_method"] == {"Node2Vec": 1, "TransE": 1}
+    assert report["rows"]["train"] > 0
+    assert report["rows"]["validation"] > 0
+    assert report["rows"]["test"] > 0
+    assert 0 <= report["popularity_baseline"]["test"]["ndcg@10"] <= 1
+    assert report["popularity_baseline"]["test"]["auc_eligible_users"] > 0
+    for method in ("Node2Vec", "TransE"):
+        result = report["selected"][method]
+        assert 0 <= result["test"]["ndcg@10"] <= 1
+        assert 0 <= result["test"]["f1@10"] <= 1
+        assert result["test"]["auc_eligible_users"] > 0
+        assert 0 <= result["test"]["auc_roc_explicit"] <= 1
+        assert result["test"]["auc_protocol"].startswith("observed held-out ratings")
+    assert len(pd.read_csv(out / "comparison_experiments.csv")) == 2
+    assert (out / "selected_transe_relations.csv").is_file()
+    assert (out / "selected_node2vec" / "vkr_n2v.npy").is_file()
+    assert (out / "comparison_report.json").is_file()
+    assert (out / "comparison_config_summary.csv").is_file()
+    assert len(pd.read_csv(out / "comparison_config_summary.csv")) == 2
+
+
+def test_full_grid_contains_at_least_30_both_algorithms():
+    grid = comparison_grid("full")
+    assert len(grid["Node2Vec"]) * 2 + len(grid["TransE"]) * 2 == 42
+    assert len(grid["TransE"]) > 0
+
+
+def test_catalog_selection_occurs_only_after_both_class_splits(tmp_path):
+    """A smaller catalog must equal filtering the already finalized full split.
+
+    This detects look-ahead from low ratings that are later withheld.
+    """
+    from src.vkr_prepare import load_book_crossing, restrict_from_training
+    raw = tmp_path / "raw"
+    _make_synthetic_bx(raw, users=6, books=18)
+    _, ratings = load_book_crossing(raw)
+    full = _signed_split(ratings, max_users=6, max_books=18, seed=2028)
+    limited = _signed_split(ratings, max_users=4, max_books=5, seed=2028)
+
+    expected_train, expected_val = restrict_from_training(
+        full[0], full[1], max_users=4, max_books=5)
+    users = set(expected_train["User-ID"])
+    books = set(expected_train["ISBN"])
+    expected_test = full[2][
+        full[2]["User-ID"].isin(users) & full[2]["ISBN"].isin(books)
+    ]
+    for got, expected in zip(limited, (expected_train, expected_val, expected_test)):
+        got_pairs = set(zip(got["User-ID"], got["ISBN"]))
+        expected_pairs = set(zip(expected["User-ID"], expected["ISBN"]))
+        assert got_pairs == expected_pairs
+
+
+
+def test_popularity_baseline_uses_only_training_positive_counts():
+    train = pd.DataFrame([
+        {"User-ID": "u", "ISBN": "b1", "Book-Rating": 8},
+        {"User-ID": "v", "ISBN": "b2", "Book-Rating": 9},
+        {"User-ID": "w", "ISBN": "b2", "Book-Rating": 8},
+        {"User-ID": "v", "ISBN": "b3", "Book-Rating": 4},
+    ])
+    heldout = pd.DataFrame([
+        {"User-ID": "u", "ISBN": "b2", "Book-Rating": 9},
+        {"User-ID": "u", "ISBN": "b3", "Book-Rating": 2},
+    ])
+    report = evaluate_user_ranking(
+        None, train, heldout, method="Popularity")
+    assert report["positive_holdout_users"] == 1
+    assert report["p@5"] == 0.2
+    assert report["mrr@5"] == 1.0  # b2 has highest positive train popularity
+    assert report["auc_roc_explicit"] == 1.0  # known positive > low-rating book
+    assert report["auc_coverage"] == 1.0

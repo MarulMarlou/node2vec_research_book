@@ -1,0 +1,265 @@
+# Запуск ВКР на Windows 10/11: инструкция для получателя
+
+Документ относится **только к ветке** `feature/vkr-stage1-typed-graph-holdout` проекта [node2vec_research_book](https://github.com/MarulMarlou/node2vec_research_book/tree/feature/vkr-stage1-typed-graph-holdout). Основная версия Python: **3.11**.
+
+## 1. Получение кода
+
+**Вариант А — Git:**
+
+```powershell
+git clone --branch feature/vkr-stage1-typed-graph-holdout --single-branch https://github.com/MarulMarlou/node2vec_research_book.git
+cd node2vec_research_book
+git branch --show-current
+```
+
+Последняя команда должна показать `feature/vkr-stage1-typed-graph-holdout`.
+
+**Вариант Б — без Git:** перейдите на [страницу ветки](https://github.com/MarulMarlou/node2vec_research_book/tree/feature/vkr-stage1-typed-graph-holdout), выберите **Code → Download ZIP**, распакуйте архив и откройте PowerShell в полученной папке.
+
+Если у вас уже есть клон со старой веткой:
+
+```powershell
+git status --short
+git fetch origin
+git switch --track origin/feature/vkr-stage1-typed-graph-holdout
+```
+
+Если локальная ветка уже создана, вместо `git switch --track` используйте `git switch feature/vkr-stage1-typed-graph-holdout`, затем `git pull --ff-only`. Перед переключением сохраните свои несохранённые изменения. Не запускайте старый `run_full_experiment.bat` — это другой контур.
+
+## 2. Проверка Python
+
+```powershell
+py -0p
+py -3.11 --version
+```
+
+Если 3.11 отсутствует, установите в PowerShell через Windows Package Manager:
+
+```powershell
+winget install --id Python.Python.3.11 --exact --source winget --accept-package-agreements --accept-source-agreements
+```
+
+После установки **откройте новый терминал** и проверьте `py -3.11 --version`. Уже имеющуюся версию Python 3.15 удалять **не требуется**.
+
+## 3. Подготовка набора данных
+
+Нужны только два оригинальных CSV: `BX-Books.csv` и `BX-Book-Ratings.csv` из [Book-Crossing / GroupLens](https://grouplens.org/datasets/book-crossing/). `BX-Users.csv` текущему конвейеру не требуется.
+
+Создайте каталог:
+
+```powershell
+New-Item -ItemType Directory -Force .\data\raw | Out-Null
+```
+
+Разместите:
+
+```text
+node2vec_research_book/
+├── data/
+│   └── raw/
+│       ├── BX-Books.csv
+│       └── BX-Book-Ratings.csv
+├── src/
+├── scripts/
+├── README.md
+└── ...
+```
+
+Проверьте:
+
+```powershell
+Test-Path .\data\raw\BX-Books.csv
+Test-Path .\data\raw\BX-Book-Ratings.csv
+```
+
+**Обе команды должны вывести `True`.** Не пересохраняйте CSV в Excel: данные читаются как `latin-1`, разделитель `;`, с поддержкой экранированных кавычек. Исходные пользовательские рейтинги и производные файлы исключены из Git; не публикуйте их как часть исходного кода без проверки условий набора.
+
+## 4. Первый запуск и проверка графа
+
+Из корня проекта:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode quick
+```
+
+При первом вызове скрипт создаст **`.venv-vkr`** на Python 3.11 и установит зависимости из `requirements-vkr-app.txt`. Первый запуск может занять некоторое время из-за загрузки библиотек.
+
+Режим `quick` использует до 150 пользователей и 1 000 книг, затем выполняет аудит. Успех: завершающие сообщения `"audit_passed": true`, `"errors": []`, `Run succeeded`. Сравнивать длительность обучения на разных ПК без описания оборудования некорректно.
+
+Основные файлы после этого:
+
+| Файл | Содержимое |
+|---|---|
+| `data/processed/vkr_knowledge_graph.graphml` | Типизированный ориентированный граф |
+| `data/processed/vkr_node2vec_graph.graphml` | Проекция для Node2Vec |
+| `data/processed/vkr_train_ratings.csv`, `vkr_test_ratings.csv` | Обучающие/отложенные оценки |
+| `results/embeddings/vkr_n2v.npy`, `vkr_n2v_ids.json` | Эмбеддинги + порядок узлов |
+| `results/metrics/vkr_pipeline_report.json` | Параметры и метрики |
+| `results/metrics/vkr_graph_audit.json` | Контроль связности, источников и утечек |
+
+Граф не содержит отложенные test-рёбра `rated`; это проверяется в `vkr_graph_audit`.
+
+## 5. Открыть веб-интерфейс
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app -SkipInstall
+```
+
+Откройте http://localhost:8501. Выберите книгу и получите рекомендации; попробуйте объяснения `shortest` и `informative`, `posthoc` и `rerank`. Для остановки сервера нажмите **Ctrl+C** в терминале.
+
+**Если интерфейс сообщает об отсутствии артефактов:** сначала запустите `quick` либо `main`. Не смешивайте граф и эмбеддинги из разных запусков — Dashboard проверяет SHA-256.
+
+## 6. Основной граф, тесты и научный эксперимент
+
+После первого запуска зависимости уже установлены; используйте `-SkipInstall`.
+
+```powershell
+# Основной подграф: до 1000 пользователей, 5000 книг
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode main -SkipInstall
+
+# Синтетические регрессионные и интеграционные тесты
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode tests -SkipInstall
+
+# Научный подбор параметров по отдельной validation-выборке (3 опыта)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick -SkipInstall
+
+# Расширенная сетка (36 запусков Node2Vec на том же уменьшенном графе)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-full -SkipInstall
+```
+
+Результаты `study-quick`/`study-full`: `results/study/embedding_experiments.csv`, `results/study/study_report.json`, граф и train/validation/test CSV. Они **не подменяют** артефакты для Streamlit.
+
+**Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
+
+## Итоги candidate-ceiling и следующий шаг после split=2092
+
+[Подтверждённый реальный эксперимент](VKR_STAGE3_CANDIDATE_CEILING_2026-11-10.md) показал: **81/120** test-пользователей не имеют ни одной положительной книги в первых 25 cosine-кандидатах, хотя все 120 имеют таковые в model catalog; первые 100 содержат хотя бы один positive у 77/120. Поэтому увеличение или изменение начального пула кандидатов важнее повторной оптимизации alpha. По test informative/rerank α=0,5 NDCG@10=0,033244 ниже posthoc=0,035940, а paired CI разности пересекает ноль.
+
+**Следующая Windows-команда** (после git pull, тестов и проверки наличия Book-Crossing CSV):
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-pool-compare -SkipInstall
+\`\`\`
+
+Она обучает Node2Vec **один раз** на новом split=2102, сравнивает pool25/pool100 на одной test-когорте и заранее разделяет эффект размера пула и эффект разных конфигураций, выбранных по validation. Итог в \`results/candidate_pool_study/\`: \`candidate_pool_study_report.json\`, \`candidate_pool_validation_grid.csv\`, \`candidate_pool_test_fixed_configuration_deltas.csv\`, \`candidate_pool_test_selected_pipeline_deltas.csv\`. [Детальная методика](VKR_CANDIDATE_POOL_25_VS_100_PROTOCOL_2026-11-10.md). Новые результаты **ещё не измерены на реальном каталоге**.
+
+## После первого парного bootstrap: дальнейшая диагностика каталога и кандидатов
+
+[Результат реального split=2082](VKR_STAGE3_PAIRED_BOOTSTRAP_2026-11-10.md): 80 test-пользователей, выбранный по validation `shortest+rerank α=0,5` дал NDCG@10=0,032821, posthoc=0,028946; 95%-й user-level bootstrap CI Δ=[−0,001410; +0,009562] **пересекает ноль**. Более того, 66 из 80 пользователей не получили релевантных книг в top-10 ни в одном режиме.
+
+**Новая исследовательская команда:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-ceiling -SkipInstall
+```
+
+Новое независимое разбиение `seed=2092`, до 120 test-пользователей. В `results/explanation_study_ceiling/explanation_study_report.json` появятся `candidate_ceiling_test` и `candidate_ceiling_validation`: число пользователей с отложенной положительной книгой в каталоге графа, среди top-25 и top-100 cosine-кандидатов. Это поможет отделить *нехватку релевантных кандидатов* от неудачного rerank. Положительные test-оценки **не используются для изменения обучения/ранжирования**, только для диагностики. Режим пока не проходил реальный запуск.
+
+## После проверки оптимизированного informative
+
+Реальный эксперимент \`explanations-optimized\` на **новом split=2072** завершён и проверен по CSV/JSON. Информативный поиск на validation top-10 **не усекался (0%)**, среднее время пути 5,656 мс vs 1,114 мс у shortest. По validation выбран \`shortest + rerank α=0,2\`, test NDCG@10=**0,066130** vs posthoc=**0,062838**. [Отчёт и ограничения](VKR_STAGE3_OPTIMIZED_RESULTS_2026-11-10.md).
+
+Для корректного **парного bootstrap**, не восстанавливаемого по старым средним, подготовлен следующий новый split=2082:
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-paired -SkipInstall
+\`\`\`
+
+Выход \`results/explanation_study_paired/explanation_test_paired_deltas.csv\` и \`explanation_study_report.json\`; обезличенный порядковый индекс пользователя и условный 95%-й интервал по 3000 bootstrap-повторам. Интервалы не учитывают новые train/test splits и повторное обучение модели, поэтому не являются общей оценкой научной значимости. Старые результаты не перезаписываются.
+
+## Следующее исследование после третьего пилота
+
+По реальным результатам `explanations-budget` (split=2062, 40 test-пользователей) увеличение ограничения поиска до 200 путей/5000 расширений **не устранило 100% усечений informative на top-10**. На validation выбран `shortest + posthoc`; на test его NDCG@10=0,053755, отдельный validation-selected reranker α=0,2 дал 0,057442. В расширенной faithfulness-серии проверено 4 пары × 20 контролей, без оснований объявлять статистически доказанную причинность. [Полный результат](VKR_STAGE3_SEARCH_BUDGET_AND_EXTENDED_FAITHFULNESS_2026-11-10.md).
+
+Для устранения комбинаторного перебора `src/vkr_explain.py` переписан: четырёхшаговые пути вычисляются через пересечение допустимых соседних книг и сортировку пар признаков по информативности. Есть тесты сравнения с полным перебором на маленьком графе. **Реальный результат после оптимизации пока не опубликован**. Проверка осуществляется на *новом* split 2072:
+
+```powershell
+git pull --ff-only origin feature/vkr-stage1-typed-graph-holdout
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-optimized -SkipInstall
+```
+
+Выход `results/explanation_study_optimized/`, не перезаписывает предыдущие результаты. Без выполнения этой команды нельзя заявлять, что оптимизация устранила проблему на реальных данных.
+
+## Обновлённый анализ после проведённого depth-4 опыта
+
+Второй реальный эксперимент с `-Mode explanations-depth4` **выполнен** (split=2052; 40 тестовых пользователей). [Сводка и методологические ограничения](VKR_STAGE3_DEPTH4_FAITHFULNESS_2026-11-10.md): `shortest + rerank α=0,5` выбран на validation, test NDCG@10=0,077620 против posthoc 0,067643; покрытие 100% против 94,25%. Однако `informative` исчерпал бюджет поиска в **100%** случаев, поэтому окончательное сравнение алгоритмов объяснения преждевременно.
+
+**Следующие эксперименты с отдельными каталогами:**
+
+```powershell
+# Новый ранее не просмотренный split 2062 и увеличение поиска до 200 путей/5000 expansions
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-budget -SkipInstall
+
+# Дополнительная контрольная серия: 4 пары, до 20 approximate degree-matched контролей на пару
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness-extended -SkipInstall
+```
+
+`results/explanation_study_budget/` и `results/faithfulness_extended/` исключены из Git; они **не заменяют** уже проведённые `explanation_study_depth4` и `faithfulness`. Новые реальные значения пока отсутствуют.
+
+## После проверки пилота: отдельный depth4 и обновлённый faithfulness
+
+[Проверенный отчёт по пилоту на реальном Book-Crossing](VKR_STAGE3_PILOT_2026-11-10.md) зафиксировал, что методы `shortest` и `informative` при путях длиной 2 дали одинаковое качество, а rerank повысил покрытие и снизил validation NDCG@10. Теперь для сравнения длин путей используйте **новый, независимый** эксперимент:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-depth4 -SkipInstall
+```
+
+Команда создаст `results/explanation_study_depth4/` (split=2052, max_depth=4, до 40 пользователей). Старый `results/explanation_study/` не перезаписывается. Итоговый test должен сравнивать posthoc и **validation-selected rerank**; нельзя выбирать α по test.
+
+Для более строгого контроля faithfulness после обновления кода:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness -SkipInstall
+```
+
+**Внимание:** этот режим перезаписывает локальную папку `results/faithfulness/`. Предыдущий пилот был с контролями, сопоставленными **только по типам отношений**; новый пытается дополнительно сопоставлять степени конечных узлов и сохраняет индивидуальные значения нулевых эффектов. Результаты нового прогона ещё не получены.
+
+## Отдельный протокол объяснимых рекомендаций
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations -SkipInstall
+```
+
+Здесь используется отдельный `train/validation/test` с `seed_split=2042`, фиксированная заранее Node2Vec, восемь конфигураций `shortest`/`informative` и `posthoc`/`rerank`, а итоговый test считается **только для выбранного на validation варианта и фиксированного posthoc контроля**. Результаты в `results/explanation_study/` перезаписываются повторным запуском. Скачанные CSV в Git не публикуются.
+
+**Важно:** отсутствие нового научного отчёта на реальном Book-Crossing не следует маскировать результатами синтетических тестов. Смотрите [исследовательскую методику](VKR_NEXT_STAGE_2026-11-10.md).
+
+## Новые режимы: жанровое обогащение, PCA и faithfulness
+
+При первом `quick/main` программа формирует обучающий граф и локальные эмбеддинги. Не нужно обновлять старые результаты 42 опытов для знакомства с новыми функциями.
+
+1. `-Mode app -SkipInstall`: в интерфейсе появилась пятая вкладка «Пространство эмбеддингов (PCA)» — двумерная проекция **загруженной модели**, выделяет выбранные книги и показывает объяснённую дисперсию.
+2. `-Mode genre -SkipInstall -ContactEmail "your-email@example.org" -GenreBatchSize 12`: **ограниченная** серия запросов к Open Library API, с кэшем, контролем ISBN и ссылкой на исходные `subjects`. Настоящий email укажите самостоятельно и не включайте в историю Git. Ограничение 1–25 ISBN за один запуск **не означает разрешения на массовый последовательный сбор**. Для больших объёмов нужен открытый офлайн-дамп и отдельная проверка.
+3. `-Mode quick -SkipInstall -UseGenres`: сознательно перестроить KG и эмбеддинги, подключив **локальный** `data/raw/book_genres.csv`. Без `-UseGenres` опубликованный граф/протокол не изменяется по смыслу. Будут перезаписаны текущие `data/processed` и `results/embeddings`.
+4. `-Mode faithfulness -SkipInstall`: ограниченный эксперимент удаления реальных фактов из объясняющего пути, повторного обучения с фиксированным seed и контрольного удаления связей того же отношения. Отчёт: `results/faithfulness/` (не передавать исходные ID пользователей публично).
+
+**Методика и ограничения новых функций:** [VKR_NEXT_STAGE_2026-11-10.md](VKR_NEXT_STAGE_2026-11-10.md). Новые модули не имеют пока опубликованных научных результатов на реальном Book-Crossing.
+
+## 7. Новый сравнительный эксперимент Node2Vec и TransE
+
+Это **отдельный** эксперимент и отдельная папка результатов. Он не перезаписывает основной Streamlit-конвейер:
+
+```powershell
+# Четыре опытных запуска: по две конфигурации каждого алгоритма, 1 seed
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-quick -SkipInstall
+
+# Большая сравнительная сетка: 42 запуска, 2 seed
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode compare-full -SkipInstall
+```
+
+Сводка появится в `results/comparison/comparison_report.json`, полная таблица попыток — в `comparison_experiments.csv`. Обе модели используют идентичное разбиение на train/validation/test и общий каталог для user→book; ROC-AUC измеряется **только по отложенным явно выставленным оценкам обоих классов**. Запуски `compare-quick` и `compare-full` перезаписывают **один и тот же** каталог `results/comparison`: архивируйте предыдущие отчёты перед новой серией.
+
+**Результаты 10.11.2026:** полная серия из 42 запусков действительно выполнена и проверена по таблицам; сохранён исходный агрегированный комплект в [результатах этапа 2](VKR_STAGE2_FULL_RESULTS_2026-11-10.md). Повторный запуск должен создавать новый локальный комплект и может занимать другое время. Не смешивайте этот протокол с `study-full` или `vkr_pipeline`.
+
+## 8. Частые вопросы
+
+| Сообщение | Что сделать |
+|---|---|
+| `No suitable Python runtime found`, `Python 3.11 required` | Установите Python 3.11 через `winget`, перезапустите терминал и проверьте `py -3.11 --version` |
+| `Required Book-Crossing CSV missing` | Проверьте оба `Test-Path` из п. 3 |
+| `ModuleNotFoundError` | Запустите скрипт без `-SkipInstall` для установки зависимостей; не используйте системный Python 3.15 |
+| `SHA-256 mismatch` | Перезапустите `quick` или `main` целиком; нельзя вручную заменить только один из файлов |
+| `port 8501 already in use` | Завершите ранее запущенный Streamlit (`Ctrl+C`) или используйте другой порт при ручном запуске |
+| Медленная установка зависимостей | Первый запуск скачивает NumPy, SciPy, Streamlit и другие пакеты; следующие запуски используйте с `-SkipInstall` |
+
+См. [текущий статус сдаваемых этапов](VKR_MILESTONES_1_2.md) и [методику](VKR_STAGE2.md).

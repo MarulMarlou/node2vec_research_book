@@ -1,32 +1,70 @@
-﻿# Python
+# Python caches / tests
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Virtual environments
+# Local Python interpreters and virtual environments
 .venv/
+.venv-*/
+.venv*/
 venv/
 env/
 
-# IDE
+# Local editors, logs, OS
 .idea/
 .vscode/
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
 
-# Large archives
+# Downloaded source datasets and derivatives (may contain user interaction data)
+/data/raw/
+/data/processed/
+/data/interim/
+/data/external/
+
+# Fresh VKR model artifacts and evaluation runs
+/results/embeddings/
+/results/study/
+/results/comparison/
+/results/metrics/vkr_*.json
+/results/metrics/vkr_*.csv
+/results/plots/vkr_*.png
+/results/plots/vkr_*.svg
+
+# Compressed data, local configuration and secrets
 *.zip
 *.7z
 *.rar
+.env
+.env.*
+!.env.example
 
-# Datasets and generated graphs
-/data/raw/
-/data/processed/
+# KG evidence ablation outputs (may contain book and other entity IDs)
+/results/faithfulness/
 
-# Trained embeddings
-/results/embeddings/
+# Explainer validation/test studies (avoid publishing individual records)
+/results/explanation_study/
 
-# Temporary files
-*.log
-*.tmp
-.DS_Store
-Thumbs.db
+/results/explanation_study_depth4/
+
+# Follow-up ablation and high-budget blind evaluation
+/results/faithfulness_extended/
+/results/explanation_study_budget/
+
+/results/explanation_study_optimized/
+
+# Private anonymized test paired-delta output
+/results/explanation_study_paired/
+
+# Holdout labels and candidate ceiling outputs remain local
+/results/explanation_study_ceiling/
+
+# One-split candidate pool comparison with paired holdout diagnostics
+/results/candidate_pool_study/

@@ -1,0 +1,10 @@
+# Minimal reproducible environment for the isolated VКR prototype.
+# Python 3.11; separate from legacy requirements.txt / PyKEEN.
+numpy==1.26.4
+pandas==2.2.3
+networkx==3.4.2
+scipy==1.13.1
+gensim==4.3.3
+pytest==8.3.5
+plotly==5.24.1
+threadpoolctl==3.6.0
