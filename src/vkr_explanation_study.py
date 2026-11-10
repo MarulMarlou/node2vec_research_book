@@ -141,12 +141,15 @@ def _cohort_evaluation(
     train: pd.DataFrame, holdout: pd.DataFrame, *,
     max_evaluated_users: int, candidate_pool: int, seed: int,
     threshold: int = 7, max_depth: int = 2,
+    max_paths: int = 50, max_expansions: int = 400,
     configs: list[dict] | None = None,
 ) -> dict:
     if not 1 <= max_evaluated_users <= 500 or candidate_pool < max(KS):
         raise ValueError("max_evaluated_users must be 1..500, candidate_pool >= 20")
     if max_depth not in (2, 4):
         raise ValueError("max_depth must be 2 or 4")
+    if not 1 <= max_paths <= 500 or not 1 <= max_expansions <= 20000:
+        raise ValueError("Search budgets must be max_paths=1..500 and max_expansions=1..20000")
     users, total_users = _eligible_users(
         holdout, threshold=threshold, max_users=max_evaluated_users, seed=seed)
     if not users:
@@ -169,7 +172,8 @@ def _cohort_evaluation(
             candidate_pool=candidate_pool)
         for method in methods:
             rows = _collect_explanations(graph, pool, method=method,
-                                         max_depth=max_depth)
+                                         max_depth=max_depth, max_paths=max_paths,
+                                         max_expansions=max_expansions)
             for config in active_configs:
                 if config["method"] != method:
                     continue
@@ -219,6 +223,8 @@ def _cohort_evaluation(
     return {"cohort_users": len(users), "eligible_users_total": int(total_users),
             "evaluated_users_fraction": len(users) / total_users,
             "candidate_pool": candidate_pool,
+            "max_paths": max_paths,
+            "max_expansions": max_expansions,
             "results": results}
 
 
@@ -226,6 +232,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
                           max_users: int = 150, max_books: int = 1000,
                           max_evaluated_users: int = 20,
                           candidate_pool: int = 25, max_depth: int = 2,
+                          max_paths: int = 50, max_expansions: int = 400,
                           split_seed: int = 2042,
                           genre_csv: Path | None = None,
                           model_params: dict | None = None) -> dict:
@@ -243,7 +250,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         embeddings = train_node2vec(node2vec_projection(graph), **params)
         val_report = _cohort_evaluation(
             graph, embeddings, train, val, max_evaluated_users=max_evaluated_users,
-            candidate_pool=candidate_pool, seed=split_seed + 101, max_depth=max_depth)
+            candidate_pool=candidate_pool, seed=split_seed + 101, max_depth=max_depth,
+            max_paths=max_paths, max_expansions=max_expansions)
         scored = val_report["results"]
         best = max(scored, key=lambda row: (
             row["ndcg@10"], row["p@10"], -int(row["config_id"])))
@@ -265,7 +273,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         test_report = _cohort_evaluation(
             graph, embeddings, train, test, max_evaluated_users=max_evaluated_users,
             candidate_pool=candidate_pool, seed=split_seed + 202,
-            max_depth=max_depth, configs=test_configs)
+            max_depth=max_depth, max_paths=max_paths,
+            max_expansions=max_expansions, configs=test_configs)
     def choose(rows, method, mode, alpha):
         return next(r for r in rows
                     if r["method"] == method and r["mode"] == mode
@@ -283,6 +292,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         "graph_nodes": graph.number_of_nodes(), "graph_edges": graph.number_of_edges(),
         "genre_csv": str(genre_csv) if genre_csv else None,
         "max_depth": max_depth,
+        "max_paths": max_paths,
+        "max_expansions": max_expansions,
         "candidate_pool": candidate_pool,
         "validation": val_report,
         "selected": best,
@@ -325,12 +336,15 @@ def main() -> None:
     parser.add_argument("--candidate-pool", type=int, default=25)
     parser.add_argument("--max-depth", type=int, choices=(2, 4), default=2)
     parser.add_argument("--split-seed", type=int, default=2042)
+    parser.add_argument("--max-paths", type=int, default=50)
+    parser.add_argument("--max-expansions", type=int, default=400)
     parser.add_argument("--genre-csv", type=Path, default=None)
     args = parser.parse_args()
     report = run_explanation_study(
         args.raw_dir, args.output_dir, max_users=args.max_users,
         max_books=args.max_books, max_evaluated_users=args.max_evaluated_users,
         candidate_pool=args.candidate_pool, max_depth=args.max_depth,
+        max_paths=args.max_paths, max_expansions=args.max_expansions,
         split_seed=args.split_seed, genre_csv=args.genre_csv)
     print(json.dumps({"validation_selected": report["selected"],
                       "test_selected": report["test_selected"],
