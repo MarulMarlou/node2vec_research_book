@@ -57,3 +57,5 @@ Thumbs.db
 # Follow-up ablation and high-budget blind evaluation
 /results/faithfulness_extended/
 /results/explanation_study_budget/
+
+/results/explanation_study_optimized/
