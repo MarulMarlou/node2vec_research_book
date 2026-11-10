@@ -74,6 +74,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## После парного bootstrap: диагностика ограничения выбора кандидатов
+
+**Реальный split=2082, 80 test-пользователей:** rerank α=0,5 NDCG@10=0,032821 против 0,028946 у posthoc; при этом 95%-й парный bootstrap-CI разницы **[−0,001410; +0,009562]** содержит нулевой эффект. Для 69 из 80 NDCG@10 не изменился, у 66 из 80 оба метода не дали релевантного попадания в top-10. [Разбор и воспроизводимость](docs/VKR_STAGE3_PAIRED_BOOTSTRAP_2026-11-10.md).
+
+Для дальнейшего изучения низких абсолютных метрик:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-ceiling -SkipInstall
+```
+
+В новом `split=2092` измеряются потолки восстановления удержанных положительных оценок: весь каталог эмбеддингов, top-25, top-100 базовых cosine-кандидатов и выбранный пул 25. Test-метки используются **только для оценки**, не для подбора кандидатов или параметров. Результаты локально в `results/explanation_study_ceiling/`, пока **не получены**.
+
 ## Новый подтверждённый оптимизированный пилот и парные интервалы
 
 Реальный \`split=2072\`: **0% усечений informative на validation** после структурной оптимизации; лучший \`shortest+rerank α=0,2\`, test NDCG@10=0,066130 против 0,062838 у фиксированного posthoc. [Полный исследовательский отчёт](docs/VKR_STAGE3_OPTIMIZED_RESULTS_2026-11-10.md).
