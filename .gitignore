@@ -62,3 +62,6 @@ Thumbs.db
 
 # Private anonymized test paired-delta output
 /results/explanation_study_paired/
+
+# Holdout labels and candidate ceiling outputs remain local
+/results/explanation_study_ceiling/
