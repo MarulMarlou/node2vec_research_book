@@ -131,6 +131,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## После проверки оптимизированного informative
+
+Реальный эксперимент \`explanations-optimized\` на **новом split=2072** завершён и проверен по CSV/JSON. Информативный поиск на validation top-10 **не усекался (0%)**, среднее время пути 5,656 мс vs 1,114 мс у shortest. По validation выбран \`shortest + rerank α=0,2\`, test NDCG@10=**0,066130** vs posthoc=**0,062838**. [Отчёт и ограничения](VKR_STAGE3_OPTIMIZED_RESULTS_2026-11-10.md).
+
+Для корректного **парного bootstrap**, не восстанавливаемого по старым средним, подготовлен следующий новый split=2082:
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-paired -SkipInstall
+\`\`\`
+
+Выход \`results/explanation_study_paired/explanation_test_paired_deltas.csv\` и \`explanation_study_report.json\`; обезличенный порядковый индекс пользователя и условный 95%-й интервал по 3000 bootstrap-повторам. Интервалы не учитывают новые train/test splits и повторное обучение модели, поэтому не являются общей оценкой научной значимости. Старые результаты не перезаписываются.
+
 ## Следующее исследование после третьего пилота
 
 По реальным результатам `explanations-budget` (split=2062, 40 test-пользователей) увеличение ограничения поиска до 200 путей/5000 расширений **не устранило 100% усечений informative на top-10**. На validation выбран `shortest + posthoc`; на test его NDCG@10=0,053755, отдельный validation-selected reranker α=0,2 дал 0,057442. В расширенной faithfulness-серии проверено 4 пары × 20 контролей, без оснований объявлять статистически доказанную причинность. [Полный результат](VKR_STAGE3_SEARCH_BUDGET_AND_EXTENDED_FAITHFULNESS_2026-11-10.md).
