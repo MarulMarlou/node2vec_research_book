@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 import networkx as nx
 import pandas as pd
@@ -138,6 +139,10 @@ def load_genres(path: Path | None) -> pd.DataFrame:
     result = result[(result["isbn"] != "") & (result["genre"] != "")]
     if (result["source_url"] == "").any():
         raise ValueError("Each genre fact needs a source_url for verification")
+    for url in result["source_url"]:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Genre source_url must be an absolute HTTPS URL with a public source")
     return result[columns].drop_duplicates().reset_index(drop=True)
 
 
@@ -212,6 +217,23 @@ def prepare(raw_dir: Path, processed_dir: Path, *, genre_csv: Path | None = None
     test.to_csv(processed_dir / "vkr_test_ratings.csv", index=False)
     nx.write_graphml(graph, processed_dir / "vkr_knowledge_graph.graphml")
     nx.write_graphml(projection, processed_dir / "vkr_node2vec_graph.graphml")
+    # Do not claim that an enrichment requirement is fully met merely because
+    # one example book has a sourced genre label.
+    supported_books = {n for n, a in graph.nodes(data=True)
+                       if a.get("entity_type") == "book"}
+    genre_edges = [(s, e) for s, _, e in graph.edges(data=True)
+                   if e.get("relation") == "has_genre"]
+    books_with_genres = {s for s, _ in genre_edges}
+    genre_coverage = len(books_with_genres) / len(supported_books) if supported_books else 0.0
+    if not genre_edges:
+        warning = "Missing genre enrichment; verified external genre facts are absent"
+    elif genre_coverage < 1:
+        warning = ("Partial genre coverage: "
+                   f"{len(books_with_genres)}/{len(supported_books)} train-supported books. "
+                   "External sources and subject taxonomy require manual verification.")
+    else:
+        warning = ("Genre coverage is complete for this limited catalog, "
+                   "but external classification accuracy is not independently verified.")
     stats = {
         "seed": seed, "test_ratio": test_ratio, "positive_threshold": positive_threshold,
         "max_users": max_users, "max_books": max_books,
@@ -222,7 +244,11 @@ def prepare(raw_dir: Path, processed_dir: Path, *, genre_csv: Path | None = None
         "entity_types": {str(k): int(v) for k, v in pd.Series(nx.get_node_attributes(graph, "entity_type")).value_counts().items()},
         "relation_types": {str(k): int(v) for k, v in pd.Series([e["relation"] for _, _, e in graph.edges(data=True)]).value_counts().items()},
         "genre_source": str(genre_csv) if genre_csv else None,
-        "warning": "Missing genre enrichment; genre requirements remain incomplete" if genres.empty else None,
+        "genre_fact_edges": len(genre_edges),
+        "genre_books_covered": len(books_with_genres),
+        "genre_book_coverage": genre_coverage,
+        "genre_source_urls": len({e.get("source_url") for _, e in genre_edges}),
+        "warning": warning,
     }
     (processed_dir / "vkr_preparation_report.json").write_text(
         json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
