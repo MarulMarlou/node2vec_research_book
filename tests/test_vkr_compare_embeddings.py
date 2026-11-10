@@ -75,6 +75,8 @@ def test_realistic_comparison_pipeline_with_explicit_auc(tmp_path):
     assert (out / "selected_transe_relations.csv").is_file()
     assert (out / "selected_node2vec" / "vkr_n2v.npy").is_file()
     assert (out / "comparison_report.json").is_file()
+    assert (out / "comparison_config_summary.csv").is_file()
+    assert len(pd.read_csv(out / "comparison_config_summary.csv")) == 2
 
 
 def test_full_grid_contains_at_least_30_both_algorithms():
