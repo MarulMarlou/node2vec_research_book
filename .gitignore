@@ -65,3 +65,6 @@ Thumbs.db
 
 # Holdout labels and candidate ceiling outputs remain local
 /results/explanation_study_ceiling/
+
+# One-split candidate pool comparison with paired holdout diagnostics
+/results/candidate_pool_study/
