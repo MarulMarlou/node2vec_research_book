@@ -45,3 +45,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# KG evidence ablation outputs (may contain book and other entity IDs)
+/results/faithfulness/
