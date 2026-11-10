@@ -185,8 +185,8 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
                      source_book: str | None = None,
                      max_pairs: int = 2, controls: int = 2,
                      method: str = "shortest", random_seed: int = 71) -> dict:
-    if not 1 <= max_pairs <= 8 or not 1 <= controls <= 5:
-        raise ValueError("max_pairs must be 1..8 and controls 1..5")
+    if not 1 <= max_pairs <= 8 or not 1 <= controls <= 20:
+        raise ValueError("max_pairs must be 1..8 and controls 1..20")
     if method not in ("shortest", "informative"):
         raise ValueError("method must be shortest or informative")
     assets = load_dashboard_assets(processed_dir, results_dir)
@@ -244,6 +244,12 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
                                                    after["score"] is not None) else None
         null_mean = (sum(before["score"] - row["score"] for row in valid_controls)
                      / len(valid_controls)) if before["score"] is not None and valid_controls else None
+        # Exploratory one-sided permutation-style comparison; limited to the
+        # actually sampled controls, not a calibrated model-wide p-value.
+        null_exceedances = (sum(value >= drop for value in control_score_drops)
+                            if drop is not None else None)
+        empirical_tail = ((1 + null_exceedances) / (1 + len(control_score_drops))
+                          if null_exceedances is not None and control_score_drops else None)
         records.append({
             "source_book": anchor, "recommended_book": target,
             "explanation_method": method, "path_length": path["length"],
@@ -257,6 +263,8 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
                                                              after["rank"] is not None) else None,
             "null_control_score_drop_mean": null_mean,
             "null_control_score_drops": control_score_drops,
+            "null_control_exceedances": null_exceedances,
+            "empirical_one_sided_tail_fraction": empirical_tail,
             "null_control_degree_mismatch_mean": (
                 sum(row["mean_log_degree_mismatch"] for row in valid_controls)
                 / len(valid_controls) if valid_controls else None),
@@ -282,7 +290,8 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
             "Deleting path facts can perturb random walks and the whole representation.",
             "Controls match relation types and approximately minimize log-degree mismatch; they do not match all structural confounders.",
             "A single training seed and limited number of source recommendations cannot establish statistical significance.",
-            "Two controls are too few for a permutation p-value or confidence interval; individual null drops are reported.",
+            "Finite approximate-degree-matched controls are exploratory; empirical one-sided tail fraction is descriptive, not a calibrated global p-value.",
+            "Control edge sets may overlap across random seeds; repeated controls do not create independent evidence.",
             "Missing source/target embeddings after removal are reported as unavailable, not scored zero.",
             "Only train graph facts are removed; validation/test interactions never enter graph training.",
             "Scores refer to user-selected current pipeline parameters (p=q=1, window=5).",
