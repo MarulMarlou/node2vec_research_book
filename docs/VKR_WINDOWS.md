@@ -131,6 +131,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## После первого парного bootstrap: дальнейшая диагностика каталога и кандидатов
+
+[Результат реального split=2082](VKR_STAGE3_PAIRED_BOOTSTRAP_2026-11-10.md): 80 test-пользователей, выбранный по validation `shortest+rerank α=0,5` дал NDCG@10=0,032821, posthoc=0,028946; 95%-й user-level bootstrap CI Δ=[−0,001410; +0,009562] **пересекает ноль**. Более того, 66 из 80 пользователей не получили релевантных книг в top-10 ни в одном режиме.
+
+**Новая исследовательская команда:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-ceiling -SkipInstall
+```
+
+Новое независимое разбиение `seed=2092`, до 120 test-пользователей. В `results/explanation_study_ceiling/explanation_study_report.json` появятся `candidate_ceiling_test` и `candidate_ceiling_validation`: число пользователей с отложенной положительной книгой в каталоге графа, среди top-25 и top-100 cosine-кандидатов. Это поможет отделить *нехватку релевантных кандидатов* от неудачного rerank. Положительные test-оценки **не используются для изменения обучения/ранжирования**, только для диагностики. Режим пока не проходил реальный запуск.
+
 ## После проверки оптимизированного informative
 
 Реальный эксперимент \`explanations-optimized\` на **новом split=2072** завершён и проверен по CSV/JSON. Информативный поиск на validation top-10 **не усекался (0%)**, среднее время пути 5,656 мс vs 1,114 мс у shortest. По validation выбран \`shortest + rerank α=0,2\`, test NDCG@10=**0,066130** vs posthoc=**0,062838**. [Отчёт и ограничения](VKR_STAGE3_OPTIMIZED_RESULTS_2026-11-10.md).
