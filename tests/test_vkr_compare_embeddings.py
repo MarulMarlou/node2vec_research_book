@@ -79,3 +79,28 @@ def test_full_grid_contains_at_least_30_both_algorithms():
     grid = comparison_grid("full")
     assert len(grid["Node2Vec"]) * 2 + len(grid["TransE"]) * 2 == 42
     assert len(grid["TransE"]) > 0
+
+
+def test_catalog_selection_occurs_only_after_both_class_splits(tmp_path):
+    """A smaller catalog must equal filtering the already finalized full split.
+
+    This detects look-ahead from low ratings that are later withheld.
+    """
+    from src.vkr_prepare import load_book_crossing, restrict_from_training
+    raw = tmp_path / "raw"
+    _make_synthetic_bx(raw, users=6, books=18)
+    _, ratings = load_book_crossing(raw)
+    full = _signed_split(ratings, max_users=6, max_books=18, seed=2028)
+    limited = _signed_split(ratings, max_users=4, max_books=5, seed=2028)
+
+    expected_train, expected_val = restrict_from_training(
+        full[0], full[1], max_users=4, max_books=5)
+    users = set(expected_train["User-ID"])
+    books = set(expected_train["ISBN"])
+    expected_test = full[2][
+        full[2]["User-ID"].isin(users) & full[2]["ISBN"].isin(books)
+    ]
+    for got, expected in zip(limited, (expected_train, expected_val, expected_test)):
+        got_pairs = set(zip(got["User-ID"], got["ISBN"]))
+        expected_pairs = set(zip(expected["User-ID"], expected["ISBN"]))
+        assert got_pairs == expected_pairs
