@@ -37,7 +37,7 @@ def test_delivery_documentation_has_no_broken_relative_markdown_links():
 def test_windows_launcher_includes_all_advertised_entry_points():
     script = ROOT / "scripts" / "run_vkr_windows.ps1"
     text = script.read_text(encoding="utf-8")
-    for mode in ("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "explanations", "explanations-depth4", "tests", "app"):
+    for mode in ("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "tests", "app"):
         assert f'"{mode}"' in text
     assert "py -3.11" in text
     assert "src.vkr_embedding_study" in text
