@@ -74,6 +74,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## После анализа candidate ceiling: один split, пулы 25 и 100
+
+**Подтверждено по split=2092:** релевантные test-книги присутствуют в каталоге для 120/120 пользователей, но в исходный top-25 входят только для **39/120**, а в top-100 — для **77/120**; 81/120 пользователей принципиально не могут получить релевантный top10 из пула 25. На test validation-selected informative/rerank α=0,5 NDCG@10=0,033244 против 0,035940 у posthoc; bootstrap CI включает ноль. [Проверенные результаты](docs/VKR_STAGE3_CANDIDATE_CEILING_2026-11-10.md).
+
+**Новый воспроизводимый эксперимент:** один общий train-only граф/Node2Vec, один **новый split=2102**, одинаковые тестовые пользователи, сравнение pool25 и pool100. Для чистого эффекта пула сравниваются оба размера при **одинаковых** методе/α (настроенных на validation для pool25). Отдельно сравниваются две validation-настроенные системы. [Полный протокол](docs/VKR_CANDIDATE_POOL_25_VS_100_PROTOCOL_2026-11-10.md).
+
+\`\`\`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-pool-compare -SkipInstall
+\`\`\`
+
+Результаты \`results/candidate_pool_study/\` пока **не получены**. Для их анализа нужны JSON и три CSV из указанной папки.
+
 ## После парного bootstrap: диагностика ограничения выбора кандидатов
 
 **Реальный split=2082, 80 test-пользователей:** rerank α=0,5 NDCG@10=0,032821 против 0,028946 у posthoc; при этом 95%-й парный bootstrap-CI разницы **[−0,001410; +0,009562]** содержит нулевой эффект. Для 69 из 80 NDCG@10 не изменился, у 66 из 80 оба метода не дали релевантного попадания в top-10. [Разбор и воспроизводимость](docs/VKR_STAGE3_PAIRED_BOOTSTRAP_2026-11-10.md).
