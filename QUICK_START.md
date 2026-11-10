@@ -74,6 +74,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## После третьей серии: проверка оптимизированного поиска
+
+Получены результаты `explanations-budget` и `faithfulness-extended`. У informative 100% усечений даже при 200/5000; четыре пары с 20 degree-aware контролями каждая дают неодинаковые по силе эффекты и **не являются достаточным статистическим доказательством**. [Подробный отчёт по третьей серии](docs/VKR_STAGE3_SEARCH_BUDGET_AND_EXTENDED_FAITHFULNESS_2026-11-10.md).
+
+Для исправления ограничений DFS добавлен структурный алгоритм поиска четырёхрёберных путей. Проверяйте его **на новом split=2072**, не переиспользуя просмотренные test:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-optimized -SkipInstall
+```
+
+Новый результат создаётся в `results/explanation_study_optimized/` и не переписывает предшествующие серии. Это **ещё не выполненный на Book-Crossing запуск**.
+
 ## После второго исследования: более строгие проверки
 
 **Новый подтверждённый depth-4 пилот:** на 40 тестовых пользователях `shortest + rerank α=0,5` показал NDCG@10=0,077620, фиксированный posthoc — 0,067643. Покрытие объяснениями: 100% против 94,25%. В informative-поиске **100% усечённых поисков** — это методологический недостаток, а не доказательство превосходства shortest. Faithfulness: обе абляции дали снижение cosine, но одна контрольная абляция второй пары дала большее падение. [Точный анализ](docs/VKR_STAGE3_DEPTH4_FAITHFULNESS_2026-11-10.md).
