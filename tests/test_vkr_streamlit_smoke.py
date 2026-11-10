@@ -37,5 +37,5 @@ def test_streamlit_page_loads_and_recommends(tmp_path):
     at.run(timeout=20)
     assert not at.exception, [str(e.message) for e in at.exception]
     assert len(at.metric) == 3
-    assert len(at.tabs) == 4
+    assert len(at.tabs) == 5
     assert any("Рекомендации" in element.value for element in at.header)
