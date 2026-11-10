@@ -59,3 +59,6 @@ Thumbs.db
 /results/explanation_study_budget/
 
 /results/explanation_study_optimized/
+
+# Private anonymized test paired-delta output
+/results/explanation_study_paired/
