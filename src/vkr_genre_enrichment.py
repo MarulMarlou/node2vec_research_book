@@ -96,8 +96,12 @@ def identify_genres(subjects: object) -> list[str]:
 
 
 def isbn_matches_edition(edition: dict, isbn: str) -> bool:
-    aliases = edition.get("isbn_10", []) + edition.get("isbn_13", [])
-    return any(normalize_isbn(a) == isbn for a in aliases if isinstance(a, str))
+    aliases = []
+    for field in ("isbn_10", "isbn_13"):
+        listed = edition.get(field, [])
+        if isinstance(listed, list):
+            aliases.extend(item for item in listed if isinstance(item, str))
+    return any(normalize_isbn(a) == isbn for a in aliases)
 
 
 def extract_genres_for_isbn(isbn: str, fetch: Callable[[str], dict]) -> list[dict[str, str]]:
@@ -112,7 +116,10 @@ def extract_genres_for_isbn(isbn: str, fetch: Callable[[str], dict]) -> list[dic
     edition_key = edition.get("key")
     if isinstance(edition_key, str) and _EDITION.fullmatch(edition_key):
         sources.append((edition.get("subjects", []), f"{BASE}{edition_key}.json"))
-    for work in edition.get("works", []):
+    works = edition.get("works", [])
+    if not isinstance(works, list):
+        works = []
+    for work in works:
         if not isinstance(work, dict):
             continue
         key = work.get("key")
