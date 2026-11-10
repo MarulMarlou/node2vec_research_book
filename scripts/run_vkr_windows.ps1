@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -40,6 +40,13 @@ if (-not $SkipInstall) {
 if ($Mode -eq "tests") {
     & $python -m pytest -q tests
     if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+    exit 0
+}
+if ($Mode -eq "faithfulness") {
+    Write-Host "Faithfulness path-ablation pilot: test-data-safe graph artifacts, 2 pairs, 2 matched controls"
+    & $python -m src.vkr_faithfulness --max-pairs 2 --controls 2
+    if ($LASTEXITCODE -ne 0) { throw "Faithfulness pilot failed" }
+    Write-Host "See results/faithfulness/faithfulness_report.json and faithfulness_pairs.csv"
     exit 0
 }
 if ($Mode -eq "app") {
