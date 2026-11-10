@@ -79,7 +79,7 @@ BX-Books.csv + BX-Book-Ratings.csv
 - `src/vkr_compare_embeddings.py` — независимый **head-to-head** сценарий Node2Vec и TransE с одинаковым train/validation/test, отложенными высокими/низкими явными оценками, AUC-ROC и MRR по k=5/10/20, сохранением параметров, времён и результатов моделей.
 - `tests/test_vkr_transe.py`, `tests/test_vkr_compare_embeddings.py` — детерминизм, отсутствие утечек, типы negative sampling, AUC на явных метках и синтетическая сквозная оценка.
 
-Windows: `-Mode compare-quick` (4 пробных запуска) или `-Mode compare-full` (42 сравнительных запуска). Артефакты — `results/comparison`, исключены из Git. **Факт выполнения всех 42 реальных запусков пока не подтверждён.** См. [полный аудит исходных требований](docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md).
+Windows: `-Mode compare-quick` (4 пробных запуска) или `-Mode compare-full` (42 сравнительных запуска). Артефакты — `results/comparison`, исключены из Git. **По предоставленным 10.11.2026 результатам выполнение 42 запусков на реальном Book-Crossing подтверждено согласованными файлами** (24 Node2Vec, 18 TransE). См. [подробный экспериментальный отчёт](docs/VKR_STAGE2_FULL_RESULTS_2026-11-10.md). См. [полный аудит исходных требований](docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md).
 
 ## 6. Ограничения текущей версии
 
