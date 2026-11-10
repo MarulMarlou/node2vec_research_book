@@ -51,3 +51,5 @@ Thumbs.db
 
 # Explainer validation/test studies (avoid publishing individual records)
 /results/explanation_study/
+
+/results/explanation_study_depth4/
