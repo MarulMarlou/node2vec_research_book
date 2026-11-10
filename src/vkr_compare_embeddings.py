@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 from threadpoolctl import threadpool_limits
 
-from src.vkr_embedding_study import configs as n2v_configs, sha256, three_way_split
-from src.vkr_prepare import load_book_crossing, restrict_from_training, load_genres, build_knowledge_graph, node2vec_projection
+from src.vkr_embedding_study import configs as n2v_configs, sha256
+from src.vkr_prepare import load_book_crossing, split_ratings, restrict_from_training, load_genres, build_knowledge_graph, node2vec_projection
 from src.vkr_recommend import train_node2vec, cosine_ranking, save_embeddings
 from src.vkr_transe import train_transe, transe_rank_user_books, TransEResult
 from src.vkr_metrics import ranking_metrics
@@ -72,11 +72,13 @@ def _signed_split(ratings: pd.DataFrame, *, max_users: int, max_books: int,
     selecting a train-only catalog, so ROC-AUC can use genuine observed low
     ratings rather than invented negative/unobserved labels.
     """
-    train, validation, test = three_way_split(
-        ratings, max_users=max_users, max_books=max_books,
-        seed=seed, positive_threshold=threshold)
-    # Important: selection above is preliminary. Re-select from the reduced
-    # train after removing explicit lows to avoid selection leakage.
+    # Split the complete corpus first; no user or book catalog selection
+    # may see any interactions that will eventually end up in val/test.
+    train_val, test = split_ratings(
+        ratings, test_ratio=0.2, seed=seed, min_positive_rating=threshold)
+    train, validation = split_ratings(
+        train_val, test_ratio=0.2, seed=seed + 1,
+        min_positive_rating=threshold)
     low = train[train["Book-Rating"] < threshold]
     val_ids: list[int] = []
     test_ids: list[int] = []
@@ -96,8 +98,8 @@ def _signed_split(ratings: pd.DataFrame, *, max_users: int, max_books: int,
     if val_ids:
         validation = pd.concat([validation, train.loc[val_ids]], ignore_index=True)
     train = train.drop(index=val_ids + test_ids).reset_index(drop=True)
-    # All three folds are finally restricted to the catalog/entities selected
-    # from training only (some may be removed after moving low ratings).
+    # Only now select the candidate catalog from final training interactions.
+    # Neither held-out positives nor held-out lows influence catalog selection.
     train, validation = restrict_from_training(train, validation, max_users, max_books)
     users, isbns = set(train["User-ID"]), set(train["ISBN"])
     test = test[test["User-ID"].isin(users) &
@@ -183,13 +185,16 @@ def evaluate_user_ranking(
 
 def run_comparison(
     raw_dir: Path, output_dir: Path, *, mode: str = "quick",
-    max_users: int = 150, max_books: int = 1000, seed_split: int = 2028,
+    max_users: int = 150, max_books: int = 1000, seed_split: int | None = None,
     seeds: tuple[int, ...] | None = None,
     grid: dict[str, list[dict]] | None = None,
     genre_csv: Path | None = None,
 ) -> dict:
     if max_users <= 0 or max_books <= 0:
         raise ValueError("max_users/max_books must be positive")
+    # Keep the expanded final test blind to the already inspected quick test.
+    if seed_split is None:
+        seed_split = 2028 if mode == "quick" else 2030
     if seeds is None:
         seeds = (42,) if mode == "quick" else (42, 43)
     if not seeds or len(seeds) != len(set(seeds)):
@@ -295,7 +300,7 @@ def main() -> None:
     parser.add_argument("--mode", choices=("quick", "full"), default="quick")
     parser.add_argument("--max-users", type=int, default=150)
     parser.add_argument("--max-books", type=int, default=1000)
-    parser.add_argument("--seed-split", type=int, default=2028)
+    parser.add_argument("--seed-split", type=int, default=None)
     parser.add_argument("--genre-csv", type=Path, default=None)
     args = parser.parse_args()
     report = run_comparison(args.raw_dir, args.output_dir, mode=args.mode,
