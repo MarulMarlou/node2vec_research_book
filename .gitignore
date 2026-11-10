@@ -48,3 +48,6 @@ Thumbs.db
 
 # KG evidence ablation outputs (may contain book and other entity IDs)
 /results/faithfulness/
+
+# Explainer validation/test studies (avoid publishing individual records)
+/results/explanation_study/
