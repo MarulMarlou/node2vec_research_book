@@ -32,6 +32,14 @@ def graph_audit(processed_dir: Path) -> dict:
     missing = len(train_pairs - rated_pairs)
     unexpected = len(rated_pairs - train_pairs)
     no_source = sum(not attrs.get("source_file") for _, _, attrs in graph.edges(data=True))
+    books = {node for node, attrs in graph.nodes(data=True)
+             if attrs.get("entity_type") == "book"}
+    genre_edges = [(source, attrs) for source, _, attrs in graph.edges(data=True)
+                   if attrs.get("relation") == "has_genre"]
+    genre_books = {source for source, _ in genre_edges}
+    malformed_genre_provenance = sum(
+        not str(attrs.get("source_url", "")).startswith("https://")
+        for _, attrs in genre_edges)
     count = graph.number_of_nodes()
     errors = []
     if collisions or leaked:
@@ -40,6 +48,8 @@ def graph_audit(processed_dir: Path) -> dict:
         errors.append("rated graph edges differ from training ratings")
     if no_source:
         errors.append("graph edges lack source_file provenance")
+    if malformed_genre_provenance:
+        errors.append("has_genre edges lack HTTPS provenance URL")
     return {
         "graph_type": type(graph).__name__,
         "nodes": count, "edges": graph.number_of_edges(),
@@ -68,6 +78,10 @@ def graph_audit(processed_dir: Path) -> dict:
                            for name, values in sorted(by_type.items())},
         "missing_provenance_file_edges": no_source,
         "genre_enrichment_present": types.get("genre", 0) > 0,
+        "genre_fact_edges": len(genre_edges),
+        "genre_books_covered": len(genre_books),
+        "genre_book_coverage": len(genre_books) / len(books) if books else 0.0,
+        "genre_missing_provenance_url_edges": malformed_genre_provenance,
         "audit_passed": not errors, "errors": errors,
     }
 
