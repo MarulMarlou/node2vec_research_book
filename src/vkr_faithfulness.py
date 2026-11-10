@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import math
 from pathlib import Path
 import random
 from typing import Any
@@ -86,6 +87,50 @@ def ablate_matched_control(graph: nx.MultiDiGraph, path: dict, seed: int
         reduced.remove_edge(s, t, key=k)
     return reduced
 
+
+
+def ablate_degree_matched_control(
+    graph: nx.MultiDiGraph, path: dict, seed: int
+) -> tuple[nx.MultiDiGraph | None, float | None]:
+    """Delete relation-matched, approximately degree-matched non-path edges.
+
+    Matches the original endpoint degree *before* removal using L1 distance
+    in log(1+degree). Protects all path nodes. The selected set is random
+    among near-best candidates (seeded), not an exact degree-conditioned null.
+    Returns the mean degree-mismatch penalty for transparent reporting.
+    """
+    if not path or not path.get("nodes") or not path.get("edges"):
+        raise ValueError("Expected an existing explanation path")
+    rng = random.Random(seed)
+    protected = set(path["nodes"])
+    reduced = graph.copy()
+    reference_degree = dict(graph.degree())
+    penalties: list[float] = []
+    for fact in path["edges"]:
+        s0, t0 = fact["source"], fact["target"]
+        if s0 not in graph or t0 not in graph:
+            raise ValueError("Explanation endpoints missing")
+        _edge_key_for_evidence(graph, fact)
+        target_log_degrees = (math.log1p(reference_degree[s0]),
+                              math.log1p(reference_degree[t0]))
+        options = []
+        for s, t, k, attrs in reduced.edges(keys=True, data=True):
+            if (attrs.get("relation") != fact.get("relation") or
+                s in protected or t in protected):
+                continue
+            penalty = (abs(math.log1p(reference_degree[s]) - target_log_degrees[0]) +
+                       abs(math.log1p(reference_degree[t]) - target_log_degrees[1]))
+            options.append((penalty, str(s), str(t), str(k), s, t, k))
+        if not options:
+            return None, None
+        options.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+        best = options[0][0]
+        near_best = [option for option in options
+                     if option[0] <= best + 0.05][:50]
+        chosen = near_best[rng.randrange(len(near_best))]
+        reduced.remove_edge(chosen[4], chosen[5], key=chosen[6])
+        penalties.append(float(chosen[0]))
+    return reduced, (sum(penalties) / len(penalties) if penalties else None)
 
 def _ranking(embeddings: pd.DataFrame, source: str, catalog: list[str],
              target: str) -> dict[str, Any]:
@@ -185,11 +230,16 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
         after = _ranking(fit(removed), anchor, catalog, target)
         controls_data = []
         for control_idx in range(controls):
-            control_graph = ablate_matched_control(
+            control_graph, degree_penalty = ablate_degree_matched_control(
                 graph, path, seed=random_seed + idx * 1000 + control_idx)
             if control_graph is not None:
-                controls_data.append(_ranking(fit(control_graph), anchor, catalog, target))
+                control_record = _ranking(fit(control_graph), anchor, catalog, target)
+                control_record["mean_log_degree_mismatch"] = degree_penalty
+                controls_data.append(control_record)
         valid_controls = [row for row in controls_data if row["score"] is not None]
+        control_score_drops = [
+            before["score"] - row["score"] for row in valid_controls
+        ] if before["score"] is not None else []
         drop = before["score"] - after["score"] if (before["score"] is not None and
                                                    after["score"] is not None) else None
         null_mean = (sum(before["score"] - row["score"] for row in valid_controls)
@@ -206,6 +256,12 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
             "rank_change": after["rank"] - before["rank"] if (before["rank"] is not None and
                                                              after["rank"] is not None) else None,
             "null_control_score_drop_mean": null_mean,
+            "null_control_score_drops": control_score_drops,
+            "null_control_degree_mismatch_mean": (
+                sum(row["mean_log_degree_mismatch"] for row in valid_controls)
+                / len(valid_controls) if valid_controls else None),
+            "explanation_minus_control_score_drop": (
+                drop - null_mean if drop is not None and null_mean is not None else None),
             "controls_requested": controls, "controls_valid": len(valid_controls),
             "ablation_uncovered_books": after["uncovered_books"],
             "ablation_reason": after["reason"],
@@ -224,8 +280,9 @@ def run_faithfulness(processed_dir: Path, results_dir: Path, output_dir: Path, *
         "limitations": [
             "A valid factual path is not proof of causation for Node2Vec cosine similarity.",
             "Deleting path facts can perturb random walks and the whole representation.",
-            "Control removals match relation types and number of edges, not node degree.",
+            "Controls match relation types and approximately minimize log-degree mismatch; they do not match all structural confounders.",
             "A single training seed and limited number of source recommendations cannot establish statistical significance.",
+            "Two controls are too few for a permutation p-value or confidence interval; individual null drops are reported.",
             "Missing source/target embeddings after removal are reported as unavailable, not scored zero.",
             "Only train graph facts are removed; validation/test interactions never enter graph training.",
             "Scores refer to user-selected current pipeline parameters (p=q=1, window=5).",
