@@ -120,15 +120,22 @@ def _auc_explicit(pos: list[float], neg: list[float]) -> float | None:
 
 
 def evaluate_user_ranking(
-    embeddings: pd.DataFrame | TransEResult, train: pd.DataFrame,
+    embeddings: pd.DataFrame | TransEResult | None, train: pd.DataFrame,
     holdout: pd.DataFrame, *, method: str, threshold: int = 7,
     ks: tuple[int, ...] = (5, 10, 20),
 ) -> dict:
     """Same candidate sets/labels for both algorithms; relation-specific scores for TransE."""
-    if method not in {"Node2Vec", "TransE"}:
+    if method not in {"Node2Vec", "TransE", "Popularity"}:
         raise ValueError("unknown method")
-    matrix = embeddings if method == "Node2Vec" else embeddings.entities
-    books = sorted(str(i) for i in matrix.index if str(i).startswith("book:"))
+    if method == "Popularity":
+        # Transparent, non-embedding benchmark: count positive train ratings.
+        # Keep exactly the train-supported catalog available to the other models.
+        books = sorted(f"book:{isbn}" for isbn in train["ISBN"].unique())
+        positive_counts = train.loc[train["Book-Rating"] >= threshold, "ISBN"].value_counts()
+        popularity = {f"book:{isbn}": int(cnt) for isbn, cnt in positive_counts.items()}
+    else:
+        matrix = embeddings if method == "Node2Vec" else embeddings.entities
+        books = sorted(str(i) for i in matrix.index if str(i).startswith("book:"))
     book_set = set(books)
     seen: dict[str, set[str]] = defaultdict(set)
     for user, isbn in train[["User-ID", "ISBN"]].itertuples(index=False, name=None):
@@ -148,8 +155,12 @@ def evaluate_user_ranking(
         candidates = [book for book in books if book not in seen[user_id]]
         if method == "Node2Vec":
             ranking = cosine_ranking(embeddings, user_id, candidates)
-        else:
+        elif method == "TransE":
             ranking = transe_rank_user_books(embeddings, user_id, candidates)
+        else:
+            ranking = sorted(((book, float(popularity.get(book, 0)))
+                              for book in candidates),
+                             key=lambda item: (-item[1], item[0]))
         rankings = [book for book, _ in ranking]
         score_by_book = dict(ranking)
         metric_row = ranking_metrics(rankings, positives, ks=ks)
@@ -242,6 +253,10 @@ def run_comparison(
                     "validation_auc_coverage": met["auc_coverage"],
                 }
                 rows.append(row)
+                # Checkpoint after each fit: an interrupted 42-run study still
+                # retains completed experiment parameters and validation scores.
+                pd.DataFrame(rows).to_csv(
+                    output_dir / "comparison_experiments.csv", index=False)
                 key = (row["validation_ndcg@10"], row["validation_p@10"],
                        -config_id, -seed)
                 if algorithm not in selected or key > selected[algorithm]["key"]:
@@ -254,6 +269,12 @@ def run_comparison(
         for algorithm in ("Node2Vec", "TransE"):
             test_metrics[algorithm] = evaluate_user_ranking(
                 models[algorithm], train, test, method=algorithm)
+        # The popularity benchmark is fitted on exactly the same final train
+        # split; it does not use validation or test labels for ranking.
+        popularity_validation = evaluate_user_ranking(
+            None, train, val, method="Popularity")
+        popularity_test = evaluate_user_ranking(
+            None, train, test, method="Popularity")
     csv_file = output_dir / "comparison_experiments.csv"
     pd.DataFrame(rows).to_csv(csv_file, index=False)
     # Save only models selected via validation; never log raw held-out IDs in report.
@@ -271,6 +292,8 @@ def run_comparison(
         "graph": {"nodes": graph.number_of_nodes(), "edges": graph.number_of_edges(),
                   "relations": sorted({str(edge["relation"]) for _, _, edge in graph.edges(data=True)})},
         "experiments": len(rows),
+        "popularity_baseline": {"validation": popularity_validation,
+                                "test": popularity_test},
         "experiments_by_method": {name: len(grid[name]) * len(seeds)
                                  for name in ("Node2Vec", "TransE")},
         "selected": {name: {"parameters": selected[name]["row"],
@@ -285,6 +308,7 @@ def run_comparison(
             "Node2Vec and TransE use different scoring geometries but identical candidate catalogs and user folds.",
             "Training follows the original graph rated edges, including explicit lower ratings; compare a positive-only ablation later.",
             "Hyperparameters and algorithms are selected on validation; no test optimization.",
+            "Popularity ranks books using only counts of positive training ratings, and is not counted as a TransE/Node2Vec fit.",
         ],
     }
     (output_dir / "comparison_report.json").write_text(
