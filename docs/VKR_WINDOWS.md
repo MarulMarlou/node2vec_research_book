@@ -131,6 +131,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## Отдельный протокол объяснимых рекомендаций
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations -SkipInstall
+```
+
+Здесь используется отдельный `train/validation/test` с `seed_split=2042`, фиксированная заранее Node2Vec, восемь конфигураций `shortest`/`informative` и `posthoc`/`rerank`, а итоговый test считается **только для выбранного на validation варианта и фиксированного posthoc контроля**. Результаты в `results/explanation_study/` перезаписываются повторным запуском. Скачанные CSV в Git не публикуются.
+
+**Важно:** отсутствие нового научного отчёта на реальном Book-Crossing не следует маскировать результатами синтетических тестов. Смотрите [исследовательскую методику](VKR_NEXT_STAGE_2026-11-10.md).
+
 ## Новые режимы: жанровое обогащение, PCA и faithfulness
 
 При первом `quick/main` программа формирует обучающий граф и локальные эмбеддинги. Не нужно обновлять старые результаты 42 опытов для знакомства с новыми функциями.
