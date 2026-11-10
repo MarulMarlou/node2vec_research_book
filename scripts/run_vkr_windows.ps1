@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "explanations-optimized", "explanations-paired", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "explanations-optimized", "explanations-paired", "explanations-ceiling", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -87,6 +87,13 @@ if ($UseGenres) {
         throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
     }
     $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
+if ($Mode -eq "explanations-ceiling") {
+    Write-Host "Independent candidate generation ceiling diagnostics, fresh split 2092"
+    & $python -m src.vkr_explanation_study --output-dir results/explanation_study_ceiling --max-users 150 --max-books 1000 --max-evaluated-users 120 --candidate-pool 25 --max-depth 4 --split-seed 2092 --max-paths 200 --max-expansions 5000 @genreArgs
+    if ($LASTEXITCODE -ne 0) { throw "Candidate ceiling study failed" }
+    Write-Host "See results/explanation_study_ceiling/explanation_study_report.json"
+    exit 0
 }
 if ($Mode -eq "explanations-paired") {
     Write-Host "Paired user-level bootstrap after validation selection, fresh split seed 2082"
