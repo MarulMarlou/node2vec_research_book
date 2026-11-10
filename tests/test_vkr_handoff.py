@@ -17,6 +17,7 @@ DOCS = [
     "docs/VKR_STAGE2_FULL_RESULTS_2026-11-10.md",
     "docs/VKR_NEXT_STAGE_2026-11-10.md",
     "docs/VKR_STAGE3_PILOT_2026-11-10.md",
+    "docs/VKR_STAGE3_DEPTH4_FAITHFULNESS_2026-11-10.md",
 ]
 
 
@@ -53,7 +54,7 @@ def test_windows_launcher_includes_all_advertised_entry_points():
 def test_venv_and_book_crossing_outputs_are_ignored():
     patterns = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for expected in (".venv*/", "/data/raw/", "/data/processed/",
-                     "/results/study/", "/results/comparison/", "/results/faithfulness/", "/results/explanation_study/", "/results/explanation_study_depth4/", "/results/embeddings/",
+                     "/results/study/", "/results/comparison/", "/results/faithfulness/", "/results/explanation_study/", "/results/explanation_study_depth4/", "/results/explanation_study_budget/", "/results/faithfulness_extended/", "/results/embeddings/",
                      "/results/metrics/vkr_*.json"):
         assert expected in patterns
     assert "experiments_updated.py" not in (ROOT / "QUICK_START.md").read_text(encoding="utf-8")
