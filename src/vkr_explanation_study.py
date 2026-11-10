@@ -219,6 +219,12 @@ def _cohort_evaluation(
                     r["path_length"] for r in first_ten if r["has_explanation"]]
                 metric.update({
                     "covered_user": bool(pool),
+                    "actual_pool_candidates": len(pool),
+                    # In contrast to top-10 average latency, this includes
+                    # all candidates processed during this user's full pool
+                    # and captures the cost of expanding pool=25 to pool=100.
+                    "total_pool_explanation_time_s": sum(
+                        r["explanation_time_s"] for r in rows),
                     "explanation_coverage": (
                         sum(r["has_explanation"] for r in first_ten) / len(first_ten)
                         if first_ten else 0.0),
