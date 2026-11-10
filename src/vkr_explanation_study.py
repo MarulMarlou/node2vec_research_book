@@ -247,10 +247,19 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         scored = val_report["results"]
         best = max(scored, key=lambda row: (
             row["ndcg@10"], row["p@10"], -int(row["config_id"])))
-        # Test contains only the validation-selected configuration and a
-        # predeclared alpha-free posthoc reference. No unused alpha is scored.
-        test_configs = [{"method": best["method"], "mode": "posthoc", "alpha": 0.0}]
-        if best["mode"] != "posthoc":
+        # A priori comparator: pick the strongest reranker on validation,
+        # even when posthoc wins overall. Compare its held-out effect exactly
+        # once against an alpha-free posthoc control, never optimize on test.
+        best_rerank = max(
+            (row for row in scored if row["mode"] == "rerank"),
+            key=lambda row: (row["ndcg@10"], row["p@10"], -int(row["config_id"])))
+        test_configs = [
+            {"method": best["method"], "mode": "posthoc", "alpha": 0.0},
+            {"method": best_rerank["method"], "mode": "rerank",
+             "alpha": best_rerank["alpha"]},
+        ]
+        if not any(c["method"] == best["method"] and c["mode"] == best["mode"]
+                   and c["alpha"] == best["alpha"] for c in test_configs):
             test_configs.append({"method": best["method"], "mode": best["mode"],
                                  "alpha": best["alpha"]})
         test_report = _cohort_evaluation(
@@ -267,8 +276,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
     save_embeddings(embeddings, output_dir / "train_only_node2vec")
     result = {
         "protocol": ("Train-only Node2Vec; same book candidate pools, method/alpha "
-                     "selected on validation; fixed posthoc baseline and selected "
-                     "config evaluated once on independent test"),
+                     "selected on validation; fixed posthoc, selected config, and "
+                     "validation-selected reranker evaluated once on independent test"),
         "split_seed": split_seed, "model_params": params,
         "train_rows": len(train), "validation_rows": len(val), "test_rows": len(test),
         "graph_nodes": graph.number_of_nodes(), "graph_edges": graph.number_of_edges(),
@@ -277,8 +286,11 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         "candidate_pool": candidate_pool,
         "validation": val_report,
         "selected": best,
+        "best_rerank_validation": best_rerank,
         "test_selected": choose(test_report["results"], best["method"], best["mode"], best["alpha"]),
         "test_posthoc_control": choose(test_report["results"], best["method"], "posthoc", 0.0),
+        "test_best_rerank": choose(test_report["results"], best_rerank["method"], "rerank",
+                                   best_rerank["alpha"]),
         "test_cohort_size": test_report["cohort_users"],
         "test_eligible_user_total": test_report["eligible_users_total"],
         "source_sha256": {
@@ -288,6 +300,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         "limitations": [
             "Book-to-book relevance is held-out user-preference proxy, not expert semantic similarity.",
             "Method and alpha were selected on validation only, not on the test.",
+            "The rerank-vs-posthoc test comparison is preselected on validation; no post-test alpha optimization.",
             "Only a bounded sample of test users and top candidate pool was evaluated.",
             "The same fixed training graph is used for all explanation comparisons.",
             "Graph paths verify facts, not their causal influence on Node2Vec score.",
@@ -322,6 +335,7 @@ def main() -> None:
     print(json.dumps({"validation_selected": report["selected"],
                       "test_selected": report["test_selected"],
                       "test_posthoc_control": report["test_posthoc_control"],
+                      "test_best_rerank": report["test_best_rerank"],
                       "report": str(args.output_dir / "explanation_study_report.json")},
                      indent=2, ensure_ascii=False))
 
