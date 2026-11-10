@@ -193,16 +193,20 @@ def find_explanations(graph: nx.MultiDiGraph, source_book: str, target_book: str
                       & admissible_books(feature_b)) - {source_book, target_book}
             if not common:
                 continue
-            mid_book = min(common)
-            candidate = [source_book, feature_a, mid_book, feature_b, target_book]
-            if not _valid_path(graph, candidate):
-                continue
-            if len(paths) >= max_paths:
-                # Bounded retained candidates: if more admissible paths could
-                # change the sorted output, report that explicitly.
-                truncated = True
+            # Multiple intermediates can yield distinct, equally scored
+            # explanations; preserve enough to return an exact top_n.
+            for mid_book in sorted(common)[:top_n]:
+                candidate = [source_book, feature_a, mid_book, feature_b, target_book]
+                if not _valid_path(graph, candidate):
+                    continue
+                if len(paths) >= max_paths:
+                    # Bounded retained candidates: if more admissible paths
+                    # could change the sorted output, flag truncation.
+                    truncated = True
+                    break
+                paths.append(candidate)
+            if truncated:
                 break
-            paths.append(candidate)
 
     ranked = [_present(graph, p) for p in paths]
     if method == "shortest":
