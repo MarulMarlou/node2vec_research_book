@@ -87,6 +87,10 @@ def test_faithfulness_full_synthetic_run(tmp_path):
     assert row["score_baseline_saved"] is not None
     assert row["path_length"] == 2
     assert row["controls_requested"] == 1
+    if row["controls_valid"] and row["cosine_score_drop"] is not None:
+        assert 0 <= row["empirical_one_sided_tail_fraction"] <= 1
+        assert row["null_control_exceedances"] == sum(
+            drop >= row["cosine_score_drop"] for drop in row["null_control_score_drops"])
     assert len(row["null_control_score_drops"]) == row["controls_valid"]
     if row["controls_valid"]:
         assert row["null_control_degree_mismatch_mean"] is not None
