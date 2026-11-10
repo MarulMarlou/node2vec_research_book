@@ -74,6 +74,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode exp
 
 Файлы `results/explanation_study/explanation_validation_grid.csv` и `explanation_study_report.json` формируются только после **реального** локального запуска. Выбор метода и `alpha` идёт по validation, test не используется для подбора. [Методика](docs/VKR_NEXT_STAGE_2026-11-10.md).
 
+## После второго исследования: более строгие проверки
+
+**Новый подтверждённый depth-4 пилот:** на 40 тестовых пользователях `shortest + rerank α=0,5` показал NDCG@10=0,077620, фиксированный posthoc — 0,067643. Покрытие объяснениями: 100% против 94,25%. В informative-поиске **100% усечённых поисков** — это методологический недостаток, а не доказательство превосходства shortest. Faithfulness: обе абляции дали снижение cosine, но одна контрольная абляция второй пары дала большее падение. [Точный анализ](docs/VKR_STAGE3_DEPTH4_FAITHFULNESS_2026-11-10.md).
+
+```powershell
+# Новый split seed=2062, max_depth=4, max_paths=200, max_expansions=5000
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-budget -SkipInstall
+
+# До 4 пар и 20 контрольных удалений для каждой; новая отдельная папка
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness-extended -SkipInstall
+```
+
+Результаты: `results/explanation_study_budget/` и `results/faithfulness_extended/`. **Новые исследования ещё нужно запустить на компьютере**; команды требуют установленного окружения, а faithfulness — наличия актуальных `quick/main` артефактов. Новые серии не перезаписывают прежние папки.
+
 ## Проверенные пилотные результаты и новый depth-4 эксперимент
 
 На реальных данных 10.11.2026 проведено 8 проверок настроек объяснений на validation, выбран `shortest + posthoc`; итоговый test NDCG@10=0,033914 и покрытие объяснениями 87,5% для 20 пользователей. Отдельный faithfulness-пилот выполнен для двух пар (не является статистическим доказательством). [Сводные результаты и ограничения](docs/VKR_STAGE3_PILOT_2026-11-10.md).
