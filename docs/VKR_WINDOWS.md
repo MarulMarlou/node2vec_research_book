@@ -131,6 +131,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## Обновлённый анализ после проведённого depth-4 опыта
+
+Второй реальный эксперимент с `-Mode explanations-depth4` **выполнен** (split=2052; 40 тестовых пользователей). [Сводка и методологические ограничения](VKR_STAGE3_DEPTH4_FAITHFULNESS_2026-11-10.md): `shortest + rerank α=0,5` выбран на validation, test NDCG@10=0,077620 против posthoc 0,067643; покрытие 100% против 94,25%. Однако `informative` исчерпал бюджет поиска в **100%** случаев, поэтому окончательное сравнение алгоритмов объяснения преждевременно.
+
+**Следующие эксперименты с отдельными каталогами:**
+
+```powershell
+# Новый ранее не просмотренный split 2062 и увеличение поиска до 200 путей/5000 expansions
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-budget -SkipInstall
+
+# Дополнительная контрольная серия: 4 пары, до 20 approximate degree-matched контролей на пару
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness-extended -SkipInstall
+```
+
+`results/explanation_study_budget/` и `results/faithfulness_extended/` исключены из Git; они **не заменяют** уже проведённые `explanation_study_depth4` и `faithfulness`. Новые реальные значения пока отсутствуют.
+
 ## После проверки пилота: отдельный depth4 и обновлённый faithfulness
 
 [Проверенный отчёт по пилоту на реальном Book-Crossing](VKR_STAGE3_PILOT_2026-11-10.md) зафиксировал, что методы `shortest` и `informative` при путях длиной 2 дали одинаковое качество, а rerank повысил покрытие и снизил validation NDCG@10. Теперь для сравнения длин путей используйте **новый, независимый** эксперимент:
