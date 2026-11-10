@@ -85,3 +85,51 @@ def test_rejects_empty_study_data(tmp_path):
     raw.mkdir()
     with pytest.raises(FileNotFoundError):
         run_candidate_pool_study(raw, tmp_path / "out")
+
+
+
+def test_expanded_pool_really_contains_more_candidates_and_trains_once(
+        tmp_path, monkeypatch):
+    import src.vkr_candidate_pool_study as subject
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    n_books = 70
+    pd.DataFrame([
+        {"ISBN": f"{i:03d}", "Book-Title": f"Book {i}",
+         "Book-Author": f"Author {i % 5}",
+         "Publisher": f"Publisher {i % 3}"}
+        for i in range(1, n_books + 1)
+    ]).to_csv(raw / "BX-Books.csv", sep=";", encoding="latin-1", index=False)
+    # Each user knows a small part of the catalogue, leaving >25 candidate
+    # books for both methods when pool limits really differ.
+    pd.DataFrame([
+        {"User-ID": str(user), "ISBN": f"{((user - 1) * 9 + i) % n_books + 1:03d}",
+         "Book-Rating": 8}
+        for user in range(1, 9)
+        for i in range(18)
+    ]).to_csv(raw / "BX-Book-Ratings.csv", sep=";", encoding="latin-1", index=False)
+
+    original = subject.train_node2vec
+    fits = []
+
+    def counted_train(graph, **params):
+        fits.append(params.copy())
+        return original(graph, **params)
+
+    monkeypatch.setattr(subject, "train_node2vec", counted_train)
+    result = subject.run_candidate_pool_study(
+        raw, tmp_path / "comparison", split_seed=2102,
+        max_users=8, max_books=70, max_evaluated_users=4,
+        max_depth=2, max_paths=20, max_expansions=50,
+        model_params={
+            "dimensions": 8, "walk_length": 6, "num_walks": 2,
+            "epochs": 1, "p": 1., "q": 1., "window": 3, "seed": 43})
+    assert len(fits) == 1, "Both pools must share one exact model fit"
+    assert result["test_pool25_selected"]["actual_pool_candidates"] <= 25
+    assert result["test_pool100_fixed25_configuration"]["actual_pool_candidates"] > 25
+    assert result["test_pool100_fixed25_configuration"]["actual_pool_candidates"] > (
+        result["test_pool25_selected"]["actual_pool_candidates"])
+    assert (result["test_pool100_fixed25_configuration"]["total_pool_explanation_time_s"] >= 0)
+    assert (result["test_candidate_ceiling_pool100"]["chosen_pool_has_positive_users"] >=
+            result["test_candidate_ceiling_pool25"]["chosen_pool_has_positive_users"])
