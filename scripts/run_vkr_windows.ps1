@@ -5,9 +5,13 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "tests", "app")]
     [string]$Mode = "quick",
-    [switch]$SkipInstall
+    [switch]$SkipInstall,
+    [switch]$UseGenres,
+    [string]$ContactEmail = "",
+    [ValidateRange(1, 25)]
+    [int]$GenreBatchSize = 12
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -51,10 +55,29 @@ foreach ($file in $required) {
         throw "Required Book-Crossing CSV missing: $file"
     }
 }
+if ($Mode -eq "genre") {
+    if ([string]::IsNullOrWhiteSpace($ContactEmail)) {
+        throw "For Open Library requests provide -ContactEmail with your real contact email."
+    }
+    if (-not (Test-Path "data\\processed\\vkr_train_ratings.csv")) {
+        throw "Training ratings missing: run -Mode quick or -Mode main first."
+    }
+    & $python -m src.vkr_genre_enrichment --train-csv data/processed/vkr_train_ratings.csv --output-csv data/raw/book_genres.csv --contact $ContactEmail --max-isbns $GenreBatchSize
+    if ($LASTEXITCODE -ne 0) { throw "Small genre enrichment failed" }
+    Write-Host "Genre facts saved in data/raw/book_genres.csv. Run quick/main with -UseGenres to add them to a new graph."
+    exit 0
+}
+$genreArgs = @()
+if ($UseGenres) {
+    if (-not (Test-Path "data\\raw\\book_genres.csv")) {
+        throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
+    }
+    $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
 if ($Mode -eq "compare-quick" -or $Mode -eq "compare-full") {
     $ComparisonMode = if ($Mode -eq "compare-quick") { "quick" } else { "full" }
     Write-Host "Node2Vec vs TransE comparative study ($ComparisonMode). Output: results/comparison"
-    & $python -m src.vkr_compare_embeddings --mode $ComparisonMode --max-users 150 --max-books 1000
+    & $python -m src.vkr_compare_embeddings --mode $ComparisonMode --max-users 150 --max-books 1000 @genreArgs
     if ($LASTEXITCODE -ne 0) { throw "Comparative study failed" }
     Write-Host "Comparison completed. See results/comparison/comparison_report.json and comparison_experiments.csv"
     exit 0
@@ -62,17 +85,17 @@ if ($Mode -eq "compare-quick" -or $Mode -eq "compare-full") {
 if ($Mode -eq "study-quick" -or $Mode -eq "study-full") {
     $StudyMode = if ($Mode -eq "study-quick") { "quick" } else { "full" }
     Write-Host "Node2Vec train/validation/test study ($StudyMode). Output: results/study"
-    & $python -m src.vkr_embedding_study --mode $StudyMode --max-users 150 --max-books 1000
+    & $python -m src.vkr_embedding_study --mode $StudyMode --max-users 150 --max-books 1000 @genreArgs
     if ($LASTEXITCODE -ne 0) { throw "Embedding study failed" }
     Write-Host "Study completed. See results/study/study_report.json and embedding_experiments.csv"
     exit 0
 }
 if ($Mode -eq "quick") {
     Write-Host "Quick run: 150 users, 1000 books; this replaces data/processed and results baseline."
-    & $python -m src.vkr_pipeline --max-users 150 --max-books 1000 --dimensions 32 --walk-length 15 --num-walks 3 --epochs 2
+    & $python -m src.vkr_pipeline --max-users 150 --max-books 1000 --dimensions 32 --walk-length 15 --num-walks 3 --epochs 2 @genreArgs
 } else {
     Write-Host "Main run: up to 1000 users, 5000 books. This may take longer on Windows."
-    & $python -m src.vkr_pipeline --max-users 1000 --max-books 5000 --dimensions 64 --walk-length 20 --num-walks 4 --epochs 3
+    & $python -m src.vkr_pipeline --max-users 1000 --max-books 5000 --dimensions 64 --walk-length 20 --num-walks 4 --epochs 3 @genreArgs
 }
 if ($LASTEXITCODE -ne 0) { throw "VKR pipeline failed" }
 & $python -m src.vkr_graph_audit
