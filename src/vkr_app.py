@@ -48,11 +48,14 @@ def draw_evidence_path(chart_data: dict) -> go.Figure:
         group = [n for n in nodes if n["type"] == entity_type]
         fig.add_trace(go.Scatter(
             x=[n["x"] for n in group], y=[n["y"] for n in group], mode="markers+text",
-            text=[n["label"][:26] + ("…" if len(n["label"]) > 26 else "") for n in group],
+            text=[("Читатель" if entity_type == "user" else
+                   n["label"][:26] + ("…" if len(n["label"]) > 26 else ""))
+                  for n in group],
             textposition="bottom center", name=entity_type,
             marker=dict(size=22, color=colors.get(entity_type, "#64748B"),
                         line=dict(width=1, color="white")),
-            customdata=[[n["id"], n["label"]] for n in group],
+            customdata=[["ID читателя скрыт", "Читатель"] if entity_type == "user"
+                        else [n["id"], n["label"]] for n in group],
             hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[0]}<extra></extra>"))
     fig.update_layout(height=370, margin=dict(l=15, r=15, t=25, b=55),
                       xaxis=dict(visible=False, range=[-0.35, len(nodes)-0.65]),
@@ -193,7 +196,13 @@ def render() -> None:
             st.write(selected["explanation"])
             st.caption("Линии соответствуют только фактически присутствующим рёбрам графа; "
                        "их исходные направления указаны ниже.")
-            st.dataframe(pd.DataFrame(plot_info["edges"]).rename(columns={
+            evidence_table = pd.DataFrame(plot_info["edges"]).copy()
+            # The verification backend retains exact IDs, but do not leak
+            # Book-Crossing user identifiers into public-facing screenshots.
+            for endpoint in ("from_id", "to_id"):
+                evidence_table[endpoint] = evidence_table[endpoint].map(
+                    lambda value: "Читатель (ID скрыт)" if str(value).startswith("user:") else value)
+            st.dataframe(evidence_table.rename(columns={
                 "from_id": "Откуда", "to_id": "Куда", "relation": "Тип связи",
                 "source_file": "Файл-источник", "source_row": "Номер записи",
                 "source_url": "Внешняя ссылка"
