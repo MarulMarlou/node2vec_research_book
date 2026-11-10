@@ -143,6 +143,7 @@ def _cohort_evaluation(
     threshold: int = 7, max_depth: int = 2,
     max_paths: int = 50, max_expansions: int = 400,
     configs: list[dict] | None = None,
+    collect_per_user: bool = False,
 ) -> dict:
     if not 1 <= max_evaluated_users <= 500 or candidate_pool < max(KS):
         raise ValueError("max_evaluated_users must be 1..500, candidate_pool >= 20")
@@ -220,12 +221,61 @@ def _cohort_evaluation(
         }
         results.append({**config, "config_id": i + 1, "users_evaluated": len(users),
                         **aggregate})
-    return {"cohort_users": len(users), "eligible_users_total": int(total_users),
-            "evaluated_users_fraction": len(users) / total_users,
-            "candidate_pool": candidate_pool,
-            "max_paths": max_paths,
-            "max_expansions": max_expansions,
-            "results": results}
+    summary = {"cohort_users": len(users), "eligible_users_total": int(total_users),
+               "evaluated_users_fraction": len(users) / total_users,
+               "candidate_pool": candidate_pool, "max_paths": max_paths,
+               "max_expansions": max_expansions, "results": results}
+    if collect_per_user:
+        # Users retain the same stable order for each method; IDs are not
+        # emitted. This enables strictly paired uncertainty calculations.
+        summary["per_user_results"] = by_config
+    return summary
+
+
+def paired_bootstrap(
+    reranker_rows: list[dict], posthoc_rows: list[dict], *,
+    seed: int, replicates: int = 3000,
+) -> tuple[pd.DataFrame, dict]:
+    """Paired, cohort-conditional uncertainty for validation-selected rerank.
+
+    Both lists are generated for the same ordered users, candidates and test
+    labels, without exposing user IDs or reselecting alpha by test metrics.
+    This confidence interval does not account for a new train/test split,
+    graph/model re-fit, or variation of the selected model.
+    """
+    if len(reranker_rows) != len(posthoc_rows) or not reranker_rows:
+        raise ValueError("Both test models must have the same nonempty cohort")
+    if not 100 <= replicates <= 100000:
+        raise ValueError("replicates must be between 100 and 100000")
+    keys = ("ndcg@10", "p@10", "mrr@10", "explanation_coverage")
+    records = []
+    for i, (reranker, baseline) in enumerate(zip(reranker_rows, posthoc_rows)):
+        row = {"anonymous_user_index": i}
+        for metric in keys:
+            selected = float(reranker[metric])
+            control = float(baseline[metric])
+            if not np.isfinite([selected, control]).all():
+                raise ValueError("Non-finite paired user metric")
+            row[f"{metric}_rerank"] = selected
+            row[f"{metric}_posthoc"] = control
+            row[f"{metric}_delta"] = selected - control
+        records.append(row)
+    results = pd.DataFrame(records)
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(records), size=(replicates, len(records)))
+    summary = {"users": len(records), "bootstrap_replicates": replicates,
+               "bootstrap_seed": seed, "ci_level": 0.95,
+               "interpretation": "conditional on fixed split, model and evaluated user cohort"}
+    for metric in keys:
+        effects = results[f"{metric}_delta"].to_numpy(dtype=float)
+        means = effects[indices].mean(axis=1)
+        lo, hi = np.quantile(means, [0.025, 0.975])
+        summary[metric] = {"mean_delta": float(effects.mean()),
+                           "bootstrap_ci95": [float(lo), float(hi)],
+                           "users_improved": int(np.count_nonzero(effects > 0)),
+                           "users_declined": int(np.count_nonzero(effects < 0)),
+                           "users_tied": int(np.count_nonzero(effects == 0))}
+    return results, summary
 
 
 def run_explanation_study(raw_dir: Path, output_dir: Path, *,
@@ -274,7 +324,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
             graph, embeddings, train, test, max_evaluated_users=max_evaluated_users,
             candidate_pool=candidate_pool, seed=split_seed + 202,
             max_depth=max_depth, max_paths=max_paths,
-            max_expansions=max_expansions, configs=test_configs)
+            max_expansions=max_expansions, configs=test_configs,
+            collect_per_user=True)
     def choose(rows, method, mode, alpha):
         return next(r for r in rows
                     if r["method"] == method and r["mode"] == mode
@@ -282,6 +333,16 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
 
     output_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(scored).to_csv(output_dir / "explanation_validation_grid.csv", index=False)
+    # A priori paired effect on the same test users and candidate pools,
+    # comparing validation-selected reranker with its matched posthoc control.
+    compare_key = (best_rerank["method"], "rerank", best_rerank["alpha"])
+    base_key = (best_rerank["method"], "posthoc", 0.0)
+    user_effects, paired_uncertainty = paired_bootstrap(
+        test_report["per_user_results"][compare_key],
+        test_report["per_user_results"][base_key],
+        seed=split_seed + 303,
+    )
+    user_effects.to_csv(output_dir / "explanation_test_paired_deltas.csv", index=False)
     save_embeddings(embeddings, output_dir / "train_only_node2vec")
     result = {
         "protocol": ("Train-only Node2Vec; same book candidate pools, method/alpha "
@@ -304,6 +365,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
                                    best_rerank["alpha"]),
         "test_cohort_size": test_report["cohort_users"],
         "test_eligible_user_total": test_report["eligible_users_total"],
+        "paired_rerank_vs_posthoc": paired_uncertainty,
+        "paired_results_csv": "explanation_test_paired_deltas.csv",
         "source_sha256": {
             name: _file_sha256(raw_dir / name)
             for name in ("BX-Books.csv", "BX-Book-Ratings.csv")
@@ -318,6 +381,8 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
             "Informative search may be truncated; report truncation rate and search budgets.",
             "Explanation time includes Python search and depends on the machine.",
             "Random per-user splits are not chronological.",
+            "Paired bootstrap CI is conditional on this one fixed train/test split, trained model, and selected user cohort; it does not quantify model/split uncertainty.",
+            "User-level deltas are anonymized by positional index, with no Book-Crossing user identifiers saved.",
         ],
     }
     (output_dir / "explanation_study_report.json").write_text(
