@@ -100,8 +100,13 @@ def _ranking(embeddings: pd.DataFrame, source: str, catalog: list[str],
     if found is None:
         return {"score": None, "rank": None, "uncovered_books": len(missing),
                 "reason": "target absent from fixed catalog"}
-    return {"score": float(found[1]), "rank": int(found[0]),
-            "uncovered_books": len(missing), "reason": None}
+    # Ranks require identical candidate universes; score can still be
+    # observed if other books lost embeddings, but the new rank is not fair.
+    return {"score": float(found[1]),
+            "rank": int(found[0]) if not missing else None,
+            "uncovered_books": len(missing),
+            "reason": ("candidate embeddings missing; rank not comparable"
+                       if missing else None)}
 
 
 def _find_pairs(graph: nx.MultiDiGraph, embeddings: pd.DataFrame, *,
