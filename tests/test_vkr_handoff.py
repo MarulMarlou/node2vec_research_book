@@ -15,6 +15,7 @@ DOCS = [
     "docs/LEGACY_PROJECT.md",
     "docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md",
     "docs/VKR_STAGE2_FULL_RESULTS_2026-11-10.md",
+    "docs/VKR_NEXT_STAGE_2026-11-10.md",
 ]
 
 
@@ -35,11 +36,14 @@ def test_delivery_documentation_has_no_broken_relative_markdown_links():
 def test_windows_launcher_includes_all_advertised_entry_points():
     script = ROOT / "scripts" / "run_vkr_windows.ps1"
     text = script.read_text(encoding="utf-8")
-    for mode in ("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "tests", "app"):
+    for mode in ("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "tests", "app"):
         assert f'"{mode}"' in text
     assert "py -3.11" in text
     assert "src.vkr_embedding_study" in text
     assert "src.vkr_compare_embeddings" in text
+    assert "src.vkr_genre_enrichment" in text
+    assert "src.vkr_faithfulness" in text
+    assert "UseGenres" in text
     assert "src.vkr_graph_audit" in text
     assert "requirements-vkr-app.txt" in text
 
@@ -47,7 +51,7 @@ def test_windows_launcher_includes_all_advertised_entry_points():
 def test_venv_and_book_crossing_outputs_are_ignored():
     patterns = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for expected in (".venv*/", "/data/raw/", "/data/processed/",
-                     "/results/study/", "/results/comparison/", "/results/embeddings/",
+                     "/results/study/", "/results/comparison/", "/results/faithfulness/", "/results/embeddings/",
                      "/results/metrics/vkr_*.json"):
         assert expected in patterns
     assert "experiments_updated.py" not in (ROOT / "QUICK_START.md").read_text(encoding="utf-8")
