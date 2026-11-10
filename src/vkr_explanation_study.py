@@ -178,7 +178,7 @@ def _cohort_evaluation(
                 relevance = truth.get(user, set())
                 metric = ranking_metrics(ranking_ids, relevance, ks=KS)
                 for k in KS:
-                    first = next((i + 1 for i, book in enumerate(ranking_ids[:k], 1)
+                    first = next((i for i, book in enumerate(ranking_ids[:k], 1)
                                   if book in relevance), None)
                     metric[f"mrr@{k}"] = (1.0 / first) if first else 0.0
                 first_ten = ranked[:10]
