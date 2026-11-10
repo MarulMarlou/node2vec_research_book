@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "explanations", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -80,6 +80,13 @@ if ($UseGenres) {
         throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
     }
     $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
+if ($Mode -eq "explanations") {
+    Write-Host "Explanation study: fixed train-only Node2Vec, validation alpha selection, test once"
+    & $python -m src.vkr_explanation_study --max-users 150 --max-books 1000 --max-evaluated-users 20 --candidate-pool 25 --max-depth 2 @genreArgs
+    if ($LASTEXITCODE -ne 0) { throw "Explanation validation study failed" }
+    Write-Host "See results/explanation_study/explanation_study_report.json and explanation_validation_grid.csv"
+    exit 0
 }
 if ($Mode -eq "compare-quick" -or $Mode -eq "compare-full") {
     $ComparisonMode = if ($Mode -eq "compare-quick") { "quick" } else { "full" }
