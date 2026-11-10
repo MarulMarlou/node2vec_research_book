@@ -28,6 +28,14 @@ from src.vkr_prepare import (build_knowledge_graph, load_book_crossing,
 from src.vkr_recommend import train_node2vec, save_embeddings
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 MODEL_PARAMS = {
     "dimensions": 64, "walk_length": 20, "num_walks": 4,
     "epochs": 3, "p": 1.0, "q": 1.0, "window": 3, "seed": 43,
@@ -133,7 +141,7 @@ def _cohort_evaluation(
     train: pd.DataFrame, holdout: pd.DataFrame, *,
     max_evaluated_users: int, candidate_pool: int, seed: int,
     threshold: int = 7, max_depth: int = 2,
-    methods: tuple[str, ...] = METHODS,
+    configs: list[dict] | None = None,
 ) -> dict:
     if not 1 <= max_evaluated_users <= 500 or candidate_pool < max(KS):
         raise ValueError("max_evaluated_users must be 1..500, candidate_pool >= 20")
@@ -147,9 +155,12 @@ def _cohort_evaluation(
     heldout_positive = holdout[holdout["Book-Rating"] >= threshold]
     truth = {str(uid): {f"book:{v}" for v in part["ISBN"]}
              for uid, part in heldout_positive.groupby("User-ID", sort=True)}
+    active_configs = explanation_configs() if configs is None else configs
+    if not active_configs:
+        raise ValueError("At least one explanation configuration required")
+    methods = tuple(sorted(set(c["method"] for c in active_configs)))
     by_config: dict[tuple[str, str, float], list[dict]] = {
-        (c["method"], c["mode"], c["alpha"]): []
-        for c in explanation_configs() if c["method"] in methods
+        (c["method"], c["mode"], c["alpha"]): [] for c in active_configs
     }
     for user in users:
         anchors = sorted(liked.get(user, set()))[:3]
@@ -159,13 +170,17 @@ def _cohort_evaluation(
         for method in methods:
             rows = _collect_explanations(graph, pool, method=method,
                                          max_depth=max_depth)
-            for config in explanation_configs():
+            for config in active_configs:
                 if config["method"] != method:
                     continue
                 ranked = _rank(rows, mode=config["mode"], alpha=config["alpha"])
-                metric = ranking_metrics(
-                    [r["book_id"] for r in ranked],
-                    truth.get(user, set()), ks=KS)
+                ranking_ids = [r["book_id"] for r in ranked]
+                relevance = truth.get(user, set())
+                metric = ranking_metrics(ranking_ids, relevance, ks=KS)
+                for k in KS:
+                    first = next((i + 1 for i, book in enumerate(ranking_ids[:k], 1)
+                                  if book in relevance), None)
+                    metric[f"mrr@{k}"] = (1.0 / first) if first else 0.0
                 first_ten = ranked[:10]
                 explanation_lengths = [
                     r["path_length"] for r in first_ten if r["has_explanation"]]
@@ -187,8 +202,7 @@ def _cohort_evaluation(
                 })
                 by_config[(method, config["mode"], config["alpha"])].append(metric)
     results = []
-    for i, config in enumerate(c for c in explanation_configs()
-                               if c["method"] in methods):
+    for i, config in enumerate(active_configs):
         rows = by_config[(config["method"], config["mode"], config["alpha"])]
         if len(rows) != len(users):
             raise ValueError("Inconsistent eligible users between evaluation methods")
@@ -197,7 +211,7 @@ def _cohort_evaluation(
             if isinstance(rows[0][k], (float, int, bool))
         ]
         aggregate = {
-            key if key != "rr" else "mrr@20": float(np.mean([r[key] for r in rows]))
+            key if key != "rr" else "rr_at_max_k": float(np.mean([r[key] for r in rows]))
             for key in numerical_keys
         }
         results.append({**config, "config_id": i + 1, "users_evaluated": len(users),
@@ -233,12 +247,16 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         scored = val_report["results"]
         best = max(scored, key=lambda row: (
             row["ndcg@10"], row["p@10"], -int(row["config_id"])))
-        # Final test is evaluated only for the preselected method, plus its
-        # fixed, alpha-free posthoc baseline. No other alpha is tested.
+        # Test contains only the validation-selected configuration and a
+        # predeclared alpha-free posthoc reference. No unused alpha is scored.
+        test_configs = [{"method": best["method"], "mode": "posthoc", "alpha": 0.0}]
+        if best["mode"] != "posthoc":
+            test_configs.append({"method": best["method"], "mode": best["mode"],
+                                 "alpha": best["alpha"]})
         test_report = _cohort_evaluation(
             graph, embeddings, train, test, max_evaluated_users=max_evaluated_users,
             candidate_pool=candidate_pool, seed=split_seed + 202,
-            max_depth=max_depth, methods=(best["method"],))
+            max_depth=max_depth, configs=test_configs)
     def choose(rows, method, mode, alpha):
         return next(r for r in rows
                     if r["method"] == method and r["mode"] == mode
@@ -264,7 +282,7 @@ def run_explanation_study(raw_dir: Path, output_dir: Path, *,
         "test_cohort_size": test_report["cohort_users"],
         "test_eligible_user_total": test_report["eligible_users_total"],
         "source_sha256": {
-            name: hashlib.sha256((raw_dir / name).read_bytes()).hexdigest()
+            name: _file_sha256(raw_dir / name)
             for name in ("BX-Books.csv", "BX-Book-Ratings.csv")
         },
         "limitations": [
