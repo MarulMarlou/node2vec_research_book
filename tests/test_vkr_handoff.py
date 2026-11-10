@@ -14,6 +14,7 @@ DOCS = [
     "docs/VKR_STAGE3.md",
     "docs/LEGACY_PROJECT.md",
     "docs/VKR_REQUIREMENTS_AUDIT_2026-10-28.md",
+    "docs/VKR_STAGE2_FULL_RESULTS_2026-11-10.md",
 ]
 
 
