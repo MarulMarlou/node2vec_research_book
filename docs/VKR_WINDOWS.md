@@ -131,6 +131,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 **Предупреждение:** `quick` и `main` сохраняют результаты в одинаковых папках `data/processed` и `results/embeddings`, поэтому следующий запуск перезаписывает предыдущую основную модель и отчёт. Если нужно сравнить файлы, сначала скопируйте их в отдельную локальную папку. `study-quick` и `study-full` аналогично перезаписывают каталог `results/study` между собой.
 
+## После проверки пилота: отдельный depth4 и обновлённый faithfulness
+
+[Проверенный отчёт по пилоту на реальном Book-Crossing](VKR_STAGE3_PILOT_2026-11-10.md) зафиксировал, что методы `shortest` и `informative` при путях длиной 2 дали одинаковое качество, а rerank повысил покрытие и снизил validation NDCG@10. Теперь для сравнения длин путей используйте **новый, независимый** эксперимент:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode explanations-depth4 -SkipInstall
+```
+
+Команда создаст `results/explanation_study_depth4/` (split=2052, max_depth=4, до 40 пользователей). Старый `results/explanation_study/` не перезаписывается. Итоговый test должен сравнивать posthoc и **validation-selected rerank**; нельзя выбирать α по test.
+
+Для более строгого контроля faithfulness после обновления кода:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness -SkipInstall
+```
+
+**Внимание:** этот режим перезаписывает локальную папку `results/faithfulness/`. Предыдущий пилот был с контролями, сопоставленными **только по типам отношений**; новый пытается дополнительно сопоставлять степени конечных узлов и сохраняет индивидуальные значения нулевых эффектов. Результаты нового прогона ещё не получены.
+
 ## Отдельный протокол объяснимых рекомендаций
 
 ```powershell
