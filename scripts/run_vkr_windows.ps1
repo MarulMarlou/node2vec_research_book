@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "explanations", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "explanations", "explanations-depth4", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -80,6 +80,13 @@ if ($UseGenres) {
         throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
     }
     $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
+if ($Mode -eq "explanations-depth4") {
+    Write-Host "Independent depth-4 explanation study (new split seed 2052). Output: results/explanation_study_depth4"
+    & $python -m src.vkr_explanation_study --output-dir results/explanation_study_depth4 --max-users 150 --max-books 1000 --max-evaluated-users 40 --candidate-pool 25 --max-depth 4 --split-seed 2052 @genreArgs
+    if ($LASTEXITCODE -ne 0) { throw "Depth-4 explanation study failed" }
+    Write-Host "See results/explanation_study_depth4/explanation_study_report.json"
+    exit 0
 }
 if ($Mode -eq "explanations") {
     Write-Host "Explanation study: fixed train-only Node2Vec, validation alpha selection, test once"
