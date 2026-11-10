@@ -66,6 +66,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode stu
 
 Другие команды: `-Mode main` — до 1 000 пользователей / 5 000 книг; `-Mode tests` — тесты. При повторных запусках `quick`/`main` основные артефакты перезаписываются. Для повторных запусков используйте `-SkipInstall` после установки зависимостей.
 
+## Новые исследовательские режимы
+
+```powershell
+# Демо текущих эмбеддингов с 2D PCA — в пятой вкладке Streamlit
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app -SkipInstall
+
+# Контролируемое небольшое обогащение ISBN из Open Library (нужен ваш email)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode genre -SkipInstall -ContactEmail "your-email@example.org" -GenreBatchSize 12
+
+# Явно перезаписать quick-модель с новым genre CSV
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode quick -SkipInstall -UseGenres
+
+# Эксперимент удаления подтверждённых рёбер и повторного обучения
+powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode faithfulness -SkipInstall
+```
+
+**Использование:** новые экспериментальные результаты сохраняются только локально. Массовые запросы к Open Library API недопустимы; жанры требуют оценки покрытия и проверки источников. **[Методика новых функций](docs/VKR_NEXT_STAGE_2026-11-10.md).**
+
 ## 7. Сравнение Node2Vec и TransE (новый второй этап)
 
 ```powershell
