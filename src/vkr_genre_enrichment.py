@@ -197,7 +197,9 @@ def enrich_training_catalog(train_csv: Path, output_csv: Path, *, contact: str,
     frame = pd.read_csv(train_csv, dtype={"ISBN": str, "User-ID": str})
     if "ISBN" not in frame:
         raise ValueError("Training CSV lacks ISBN")
-    requested = sorted(frame["ISBN"].dropna().astype(str).unique())
+    counts = frame["ISBN"].dropna().astype(str).value_counts()
+    # Prioritize well-supported train books, never using validation/test rows.
+    requested = sorted(counts.index.tolist(), key=lambda isbn: (-int(counts[isbn]), isbn))
     if not requested:
         raise ValueError("Training catalog is empty")
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -238,7 +240,8 @@ def enrich_training_catalog(train_csv: Path, output_csv: Path, *, contact: str,
         "facts_added_this_batch": len(successes),
         "completed_unique_isbns": len(status),
         "training_catalog_unique_isbns": len(requested),
-        "covered_training_isbns": len(set(existing["isbn"]) | {x["isbn"] for x in successes}),
+        "covered_training_isbns": len((set(existing["isbn"]) |
+                                      {x["isbn"] for x in successes}) & set(requested)),
         "unmatched_isbns": sum(val == 0 for val in status.values()),
         "failed_requests": failures,
         "network_requests": getattr(client, "requests", None),
