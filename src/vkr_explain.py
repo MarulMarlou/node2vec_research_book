@@ -125,42 +125,84 @@ def find_explanations(graph: nx.MultiDiGraph, source_book: str, target_book: str
             paths.append(candidate)
 
     if max_depth == 4 and (method == "informative" or not paths):
-        expansions = 0
-        def explore(nodes: list[str]) -> None:
-            nonlocal expansions, truncated
-            if truncated:
-                return
-            if len(nodes) == 5:
-                if nodes[-1] == target_book and _valid_path(graph, nodes):
-                    if len(paths) >= max_paths:
-                        truncated = True
-                    else:
-                        paths.append(nodes.copy())
-                return
-            for neighbor in sorted(undirected.neighbors(nodes[-1])):
-                expansions += 1
-                if expansions > max_expansions:
-                    truncated = True
-                    return
-                if neighbor in nodes:
-                    continue
-                level = len(nodes)
-                kind = graph.nodes[neighbor].get("entity_type")
-                if level % 2 == 0 and kind != "book":
-                    continue
-                if level % 2 == 1 and kind not in HUB_TYPES:
-                    continue
-                if neighbor == target_book and level != 4:
-                    continue
-                if level == 4 and neighbor != target_book:
-                    continue
-                prefix = nodes + [neighbor]
-                if len(prefix) == 3 and not _valid_path(graph, prefix):
-                    continue
-                explore(prefix)
-                if truncated:
-                    return
-        explore([source_book])
+        # A valid length-4 explanation is always:
+        # book -> featureA -> intermediate_book -> featureB -> book.
+        # Instead of enumerating all walks from the source (which explodes
+        # around hub users and consistently exhausts the DFS budget), join
+        # the sets of admissible books for endpoint features. The path score
+        # depends only on the features, not on the intermediate book, so the
+        # lexicographically first common intermediate represents each pair.
+        n_books = sum(a.get("entity_type") == "book"
+                      for _, a in graph.nodes(data=True))
+        hub_book_cache: dict[str, set[str]] = {}
+        hub_weight_cache: dict[str, float] = {}
+
+        def admissible_books(hub: str) -> set[str]:
+            if hub not in hub_book_cache:
+                hub_kind = graph.nodes[hub].get("entity_type")
+                relation = {"author": "written_by", "publisher": "published_by",
+                            "genre": "has_genre", "user": "rated"}[hub_kind]
+                good = set()
+                for book in undirected.neighbors(hub):
+                    if graph.nodes[book].get("entity_type") != "book":
+                        continue
+                    fact = _fact(graph, book, hub)
+                    if (fact["relation"] == relation and
+                            (hub_kind != "user" or float(fact.get("rating", 0)) >= 7)):
+                        good.add(book)
+                hub_book_cache[hub] = good
+            return hub_book_cache[hub]
+
+        def hub_weight(hub: str) -> float:
+            if hub not in hub_weight_cache:
+                kind = graph.nodes[hub]["entity_type"]
+                n_adjacent_books = sum(
+                    graph.nodes[n].get("entity_type") == "book"
+                    for n in undirected.neighbors(hub))
+                idf = math.log((1 + n_books) / (1 + n_adjacent_books))
+                hub_weight_cache[hub] = HUB_WEIGHT[kind] * max(0.0, idf)
+            return hub_weight_cache[hub]
+
+        start_hubs = sorted(h for h in undirected.neighbors(source_book)
+                            if graph.nodes[h].get("entity_type") in HUB_TYPES
+                            and source_book in admissible_books(h))
+        end_hubs = sorted(h for h in undirected.neighbors(target_book)
+                          if graph.nodes[h].get("entity_type") in HUB_TYPES
+                          and target_book in admissible_books(h))
+        possible_pairs = [
+            (max(0.0, (hub_weight(a) + hub_weight(b)) / 2 - 0.6), a, b)
+            for a in start_hubs for b in end_hubs if a != b
+        ]
+        possible_pairs.sort(key=lambda item: (-item[0], item[1], item[2]))
+        examined_pairs = 0
+        # For informative, pairs are in descending theoretical score. Once
+        # the next pair has strictly lower score than the current kth result,
+        # the top_n are certified even without exhausting remaining pairs.
+        for possible_score, feature_a, feature_b in possible_pairs:
+            if method == "informative" and len(paths) >= top_n:
+                cutoff = sorted(
+                    (_rank_path(graph, p) for p in paths), reverse=True
+                )[top_n - 1]
+                if possible_score < cutoff - 1e-12:
+                    break
+            examined_pairs += 1
+            if examined_pairs > max_expansions:
+                truncated = True
+                break
+            common = (admissible_books(feature_a)
+                      & admissible_books(feature_b)) - {source_book, target_book}
+            if not common:
+                continue
+            mid_book = min(common)
+            candidate = [source_book, feature_a, mid_book, feature_b, target_book]
+            if not _valid_path(graph, candidate):
+                continue
+            if len(paths) >= max_paths:
+                # Bounded retained candidates: if more admissible paths could
+                # change the sorted output, report that explicitly.
+                truncated = True
+                break
+            paths.append(candidate)
 
     ranked = [_present(graph, p) for p in paths]
     if method == "shortest":
