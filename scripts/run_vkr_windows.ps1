@@ -5,7 +5,7 @@
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode app
 # powershell -ExecutionPolicy Bypass -File .\scripts\run_vkr_windows.ps1 -Mode study-quick
 param(
-    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "tests", "app")]
+    [ValidateSet("quick", "main", "study-quick", "study-full", "compare-quick", "compare-full", "genre", "faithfulness", "faithfulness-extended", "explanations", "explanations-depth4", "explanations-budget", "explanations-optimized", "tests", "app")]
     [string]$Mode = "quick",
     [switch]$SkipInstall,
     [switch]$UseGenres,
@@ -87,6 +87,13 @@ if ($UseGenres) {
         throw "Genre CSV missing; first run -Mode genre (small sample) or supply a verified data/raw/book_genres.csv."
     }
     $genreArgs = @("--genre-csv", "data/raw/book_genres.csv")
+}
+if ($Mode -eq "explanations-optimized") {
+    Write-Host "Optimized typed 4-hop join on a fresh split seed 2072; test evaluated after validation selection"
+    & $python -m src.vkr_explanation_study --output-dir results/explanation_study_optimized --max-users 150 --max-books 1000 --max-evaluated-users 40 --candidate-pool 25 --max-depth 4 --split-seed 2072 --max-paths 200 --max-expansions 5000 @genreArgs
+    if ($LASTEXITCODE -ne 0) { throw "Optimized explanation study failed" }
+    Write-Host "See results/explanation_study_optimized/explanation_study_report.json"
+    exit 0
 }
 if ($Mode -eq "explanations-budget") {
     Write-Host "High-budget explanation method study on a fresh split 2062, depth4, 40 evaluation users"
