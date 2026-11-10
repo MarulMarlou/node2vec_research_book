@@ -77,7 +77,10 @@ def draw_embedding_map(projection) -> go.Figure:
             fig.add_trace(go.Scattergl(
                 x=sub["x"].tolist(), y=sub["y"].tolist(), mode="markers",
                 name=entity_type + (" · выбранные" if focused else ""),
-                customdata=[[row["id"], row["label"]] for _, row in sub.iterrows()],
+                customdata=[
+                    ["ID читателя скрыт", "Читатель"] if entity_type == "user"
+                    else [row["id"], row["label"]]
+                    for _, row in sub.iterrows()],
                 hovertemplate="<b>%{customdata[1]}</b><br>%{customdata[0]}<extra></extra>",
                 marker=dict(size=16 if focused else 7, opacity=1 if focused else 0.55,
                             color=colors.get(entity_type, "#94A3B8"),
